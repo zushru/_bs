@@ -1,0 +1,25 @@
+Only in /tmp/snap/tree/lib/core/src: api_logic.cpp
+Only in /tmp/snap/tree/lib/core/src: api_logic.h
+Only in /tmp/snap/tree/lib/core/src: backup_format.cpp
+Only in /tmp/snap/tree/lib/core/src: backup_format.h
+Files /tmp/snap/baseline/lib/core/src/clock_policy.cpp and /tmp/snap/tree/lib/core/src/clock_policy.cpp differ
+Files /tmp/snap/baseline/lib/core/src/closure_engine.cpp and /tmp/snap/tree/lib/core/src/closure_engine.cpp differ
+Only in /tmp/snap/tree/lib/core/src: config_store.cpp
+Only in /tmp/snap/tree/lib/core/src: config_store.h
+Only in /tmp/snap/tree/lib/core/src: enrolled_roster.cpp
+Only in /tmp/snap/tree/lib/core/src: enrolled_roster.h
+Only in /tmp/snap/tree/lib/core/src: fileset.h
+Files /tmp/snap/baseline/lib/core/src/log_store.cpp and /tmp/snap/tree/lib/core/src/log_store.cpp differ
+Files /tmp/snap/baseline/lib/core/src/log_store.h and /tmp/snap/tree/lib/core/src/log_store.h differ
+Only in /tmp/snap/tree/lib/core/src: month_set.cpp
+Only in /tmp/snap/tree/lib/core/src: month_set.h
+Only in /tmp/snap/tree/lib/core/src: roster_store.cpp
+Only in /tmp/snap/tree/lib/core/src: roster_store.h
+Only in /tmp/snap/tree/test: test_api
+Only in /tmp/snap/tree/test: test_backup
+Only in /tmp/snap/tree/test: test_config
+Files /tmp/snap/baseline/test/test_coreb2/test_main.cpp and /tmp/snap/tree/test/test_coreb2/test_main.cpp differ
+Only in /tmp/snap/tree/test: test_enroll
+Only in /tmp/snap/tree/test: test_hardening
+Only in /tmp/snap/tree/test: test_monthset
+Only in /tmp/snap/tree/test: test_roster
