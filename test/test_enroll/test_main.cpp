@@ -3,6 +3,7 @@
 #include <string.h>
 #include <vector>
 #include "enrolled_roster.h"
+#include "enroll_fsm.h"
 using namespace att;
 
 void setUp() {}
@@ -149,6 +150,512 @@ void test_close_snapshot_excludes_unenrolled() {
     int closes; TEST_ASSERT_EQUAL_INT(0, closedExpected(o, g, &closes)); }
 }
 
+
+struct FakeEnrollSensor : IEnrollSensor {
+  std::vector<EnrollIo> captures, converts, searches, creates, stores;
+  std::vector<uint16_t> pages;
+  size_t capturePos = 0, convertPos = 0, searchPos = 0, createPos = 0, storePos = 0, pagePos = 0;
+  uint16_t score = 321, lastStoredPage = 0xFFFF;
+  uint8_t lastBuffer = 0;
+  int captureCalls = 0, convertCalls = 0, searchCalls = 0, createCalls = 0, storeCalls = 0;
+  bool pending = false;
+  bool operationPending() const override { return pending; }
+  static EnrollIo next(const std::vector<EnrollIo>& values, size_t& pos, EnrollIo fallback) {
+    return pos < values.size() ? values[pos++] : fallback;
+  }
+  EnrollIo captureImage() override {
+    ++captureCalls;
+    EnrollIo result = next(captures, capturePos, (captureCalls % 2) == 0 ? EIO_NO_FINGER : EIO_OK);
+    pending = result == EIO_PENDING;
+    return result;
+  }
+  EnrollIo convertImage(uint8_t buffer) override {
+    ++convertCalls; lastBuffer = buffer;
+    EnrollIo result = next(converts, convertPos, EIO_OK);
+    pending = result == EIO_PENDING;
+    return result;
+  }
+  EnrollIo searchTemplate(uint16_t& page, uint16_t& outScore) override {
+    ++searchCalls;
+    page = pagePos < pages.size() ? pages[pagePos++] : 0;
+    outScore = score;
+    EnrollIo result = next(searches, searchPos, EIO_NO_MATCH);
+    pending = result == EIO_PENDING;
+    return result;
+  }
+  EnrollIo createModel() override {
+    ++createCalls;
+    EnrollIo result = next(creates, createPos, EIO_OK);
+    pending = result == EIO_PENDING;
+    return result;
+  }
+  EnrollIo storeModel(uint16_t page) override {
+    ++storeCalls; lastStoredPage = page;
+    EnrollIo result = next(stores, storePos, EIO_OK);
+    pending = result == EIO_PENDING;
+    return result;
+  }
+};
+
+static void validEmptyOccupancy(Occupancy& o) { o.begin(); o.finish(); }
+static void driveToStore(EnrollFsm& f) {
+  for (int i = 0; i < 7; i++) f.step();
+}
+
+void test_fsm_begin_requires_valid_occupancy() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A");
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OCCUPANCY_INVALID, f.begin(300, false));
+  TEST_ASSERT_EQUAL_INT(EN_IDLE, f.state());
+}
+void test_fsm_queue_is_active_roster_minus_occupancy() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); g.add(2, "B"); g.add(3, "C");
+  g.off(3, FRI - 5);
+  o.begin(); o.setPresent(1, true); o.finish();
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  TEST_ASSERT_EQUAL_UINT16(1, f.queueSize());
+  TEST_ASSERT_EQUAL_UINT16(1, f.queuePosition());
+  TEST_ASSERT_EQUAL_UINT16(2, f.currentId());
+}
+void test_fsm_rejects_active_student_above_sensor_capacity() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(300, "Last"); validEmptyOccupancy(o);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_ID_OUT_OF_RANGE, f.begin(299, false));
+}
+void test_fsm_enforces_45_active_student_limit() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  for (uint16_t id = 1; id <= 46; id++) g.add(id, "S");
+  validEmptyOccupancy(o);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_STUDENT_LIMIT, f.begin(300, false));
+}
+void test_fsm_empty_queue_finishes_immediately() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); o.begin(); o.setPresent(1, true); o.finish();
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_NO_WORK, f.begin(300, true));
+  TEST_ASSERT_EQUAL_INT(EN_DONE, f.state());
+  TEST_ASSERT_EQUAL_UINT16(0, f.queueSize());
+}
+void test_fsm_duplicate_blocks_store_and_reports_existing_id() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.searches.push_back(EIO_OK); sensor.pages.push_back(9);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step(); f.step(); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_DUPLICATE_FOUND, f.state());
+  TEST_ASSERT_EQUAL_UINT16(10, f.duplicateId());
+  TEST_ASSERT_EQUAL_UINT16(321, f.duplicateScore());
+  TEST_ASSERT_EQUAL_INT(0, sensor.storeCalls);
+  TEST_ASSERT_TRUE(f.tryDifferentFinger());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+}
+void test_fsm_can_skip_duplicate_and_continue_queue() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); g.add(2, "B"); validEmptyOccupancy(o);
+  sensor.searches.push_back(EIO_OK); sensor.pages.push_back(4);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step(); f.step(); f.step();
+  TEST_ASSERT_TRUE(f.skipCurrent());
+  TEST_ASSERT_EQUAL_UINT16(1, f.skippedCount());
+  TEST_ASSERT_EQUAL_UINT16(2, f.currentId());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+}
+void test_fsm_stores_at_id_minus_one_and_advances_after_release() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); g.add(2, "B"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK, EIO_NO_FINGER, EIO_OK, EIO_OK, EIO_NO_FINGER, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  TEST_ASSERT_EQUAL_INT(EN_STORE_MODEL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(1, sensor.storeCalls);
+  TEST_ASSERT_EQUAL_UINT16(0, sensor.lastStoredPage);
+  TEST_ASSERT_TRUE(o.has(1));
+  TEST_ASSERT_EQUAL_UINT16(1, f.enrolledCount());
+  TEST_ASSERT_EQUAL_UINT16(2, f.currentId());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();  // Previous finger remains placed; do not accept it for student 2.
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  TEST_ASSERT_EQUAL_INT(2, sensor.convertCalls);  // Only the first student's pair was converted.
+  f.step();  // Finger is now removed.
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+}
+
+void test_fsm_waits_for_first_finger_removal_before_second_sample() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK, EIO_OK, EIO_NO_FINGER, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step(); f.step(); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();  // Same finger is still present.
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  TEST_ASSERT_EQUAL_INT(1, sensor.convertCalls);
+  f.step();  // Explicit no-finger result unlocks the second sample.
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_SECOND_FINGER, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CONVERT_SECOND, f.state());
+}
+void test_fsm_verify_toggle_off_skips_post_store_scan() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f); f.step();
+  TEST_ASSERT_FALSE(f.verificationEnabled());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  TEST_ASSERT_EQUAL_UINT16(0, f.currentId());
+  TEST_ASSERT_FALSE(f.skipCurrent());  // There is no next student to skip while waiting for release.
+  f.step();  // End the batch only after the enrollment finger is gone.
+  TEST_ASSERT_EQUAL_INT(EN_DONE, f.state());
+  TEST_ASSERT_EQUAL_INT(1, sensor.searchCalls);  // duplicate check only
+  TEST_ASSERT_EQUAL_INT(4, sensor.captureCalls); // includes final finger-release check
+  TEST_ASSERT_EQUAL_UINT16(0, f.verifiedCount());
+}
+void test_fsm_verify_toggle_on_requires_remove_then_matching_scan() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK, EIO_NO_FINGER, EIO_OK, EIO_NO_FINGER, EIO_OK};
+  sensor.searches = {EIO_NO_MATCH, EIO_OK};
+  sensor.pages = {0, 0};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, true));
+  driveToStore(f); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_WAIT_VERIFY_FINGER, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_CONVERT_VERIFY, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_SEARCH_VERIFY, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_DONE, f.state());
+  TEST_ASSERT_EQUAL_UINT16(1, f.enrolledCount());
+  TEST_ASSERT_EQUAL_UINT16(1, f.verifiedCount());
+}
+void test_fsm_verify_failure_is_visible_and_can_continue_without_deleting() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK, EIO_NO_FINGER, EIO_OK, EIO_NO_FINGER, EIO_OK};
+  sensor.searches = {EIO_NO_MATCH, EIO_NO_MATCH};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, true));
+  driveToStore(f); f.step(); f.step(); f.step(); f.step(); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_VERIFY_FAILED, f.state());
+  TEST_ASSERT_TRUE(o.has(1));  // template remains stored; no unverified delete command is issued
+  TEST_ASSERT_EQUAL_UINT16(1, f.enrolledCount());
+  TEST_ASSERT_EQUAL_UINT16(0, f.duplicateId());
+  TEST_ASSERT_TRUE(f.continueAfterVerificationFailure());
+  TEST_ASSERT_EQUAL_UINT16(1, f.verificationFailedCount());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_DONE, f.state());
+}
+void test_fsm_no_finger_is_wait_not_an_error() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_NO_FINGER, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  TEST_ASSERT_FALSE(f.retry());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+}
+void test_fsm_pauses_after_three_transient_errors_and_can_retry() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_RETRYABLE, EIO_RETRYABLE, EIO_RETRYABLE, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step(); f.step(); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_RETRY_REQUIRED, f.state());
+  TEST_ASSERT_TRUE(f.retry());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+}
+void test_fsm_model_mismatch_restarts_first_finger_pair() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.creates.push_back(EIO_MISMATCH);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  for (int i = 0; i < 6; i++) f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CREATE_MODEL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  TEST_ASSERT_EQUAL_INT(0, sensor.storeCalls);
+}
+void test_fsm_rechecks_occupancy_before_store() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  o.setPresent(1, true);  // an out-of-band write took this slot after the queue was built
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_SLOT_TAKEN, f.state());
+  TEST_ASSERT_EQUAL_INT(0, sensor.storeCalls);
+}
+void test_fsm_rechecks_roster_before_store() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  g.off(1, FRI - 1);
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_ROSTER_CHANGED, f.state());
+  TEST_ASSERT_EQUAL_INT(0, sensor.storeCalls);
+}
+void test_fsm_invalid_occupancy_before_store_blocks_write() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  o.begin();
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_OCCUPANCY_REFRESH_REQUIRED, f.state());
+  TEST_ASSERT_EQUAL_INT(0, sensor.storeCalls);
+}
+void test_fsm_ambiguous_store_invalidates_and_refresh_detects_success() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK, EIO_NO_FINGER, EIO_OK, EIO_OK, EIO_NO_FINGER};
+  sensor.stores.push_back(EIO_RETRYABLE);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_OCCUPANCY_REFRESH_REQUIRED, f.state());
+  TEST_ASSERT_FALSE(o.valid);
+  f.step();
+  TEST_ASSERT_EQUAL_INT(1, sensor.storeCalls);  // never blindly retry an uncertain store
+  o.begin(); o.setPresent(1, true); o.finish();
+  TEST_ASSERT_TRUE(f.resumeAfterOccupancyRefresh());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();  // Fake sensor still reports the finger held.
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_DONE, f.state());
+  TEST_ASSERT_EQUAL_UINT16(1, f.enrolledCount());
+}
+void test_fsm_ambiguous_store_refresh_without_target_requeues_student() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK, EIO_NO_FINGER, EIO_OK, EIO_OK, EIO_NO_FINGER};
+  sensor.stores.push_back(EIO_FATAL);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f); f.step();
+  o.begin(); o.finish();  // full index refresh confirms the target page is still empty
+  TEST_ASSERT_TRUE(f.resumeAfterOccupancyRefresh());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();  // Still held.
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  TEST_ASSERT_EQUAL_UINT16(1, f.currentId());
+  TEST_ASSERT_EQUAL_UINT16(0, f.enrolledCount());
+}
+
+void test_fsm_skip_is_blocked_while_sensor_command_is_pending() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_OK};
+  sensor.converts = {EIO_PENDING, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step();  // capture acknowledged
+  TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+  f.step();  // convert has started but is still in flight
+  TEST_ASSERT_TRUE(sensor.operationPending());
+  TEST_ASSERT_FALSE(f.skipCurrent());
+  TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+  f.step();  // drain the convert response before allowing the queue to advance
+  TEST_ASSERT_FALSE(sensor.operationPending());
+  TEST_ASSERT_EQUAL_INT(EN_SEARCH_DUPLICATE, f.state());
+  TEST_ASSERT_TRUE(f.skipCurrent());
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+}
+
+void test_fsm_cancel_waits_for_confirmed_finger_removal() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_PENDING, EIO_OK, EIO_PENDING, EIO_NO_FINGER};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.cancel();
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_BUSY, f.begin(300, false));
+  f.step();  // Command has been sent; the result is not ready yet.
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  TEST_ASSERT_TRUE(f.sensorReserved());
+  TEST_ASSERT_FALSE(f.retryCancelRelease());
+  f.step();  // Finger is still held.
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  TEST_ASSERT_TRUE(f.sensorReserved());
+  f.step();  // Release probe is still in flight: pending is not a sensor fault.
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  TEST_ASSERT_TRUE(f.sensorReserved());
+  f.step();  // Only a positive no-finger result completes cancellation.
+  TEST_ASSERT_EQUAL_INT(EN_CANCELLED, f.state());
+  TEST_ASSERT_EQUAL_INT(4, sensor.captureCalls);
+}
+
+
+void test_fsm_cancel_drains_inflight_command_before_release_fence() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_PENDING, EIO_OK, EIO_NO_FINGER};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step();
+  TEST_ASSERT_TRUE(sensor.operationPending());
+  f.cancel();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  f.step();  // Finish the in-flight image command; do not issue a second command yet.
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  f.step();  // Start and complete the explicit no-finger check.
+  TEST_ASSERT_EQUAL_INT(EN_CANCELLED, f.state());
+  TEST_ASSERT_FALSE(f.sensorReserved());
+}
+
+void test_fsm_cancel_sensor_fault_keeps_ownership_until_retry_and_release() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_RETRYABLE, EIO_RETRYABLE, EIO_RETRYABLE, EIO_NO_FINGER};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.cancel();
+  f.step(); f.step(); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_RELEASE_FAULT, f.state());
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_BUSY, f.begin(300, false));
+  const int pausedCalls = sensor.captureCalls;
+  f.step();
+  TEST_ASSERT_EQUAL_INT(pausedCalls, sensor.captureCalls);
+  TEST_ASSERT_TRUE(f.retryCancelRelease());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CANCELLED, f.state());
+}
+
+
+
+void test_fsm_pending_sensor_results_do_not_advance_or_consume_retries() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.captures = {EIO_PENDING, EIO_OK, EIO_PENDING, EIO_NO_FINGER};
+  sensor.converts = {EIO_PENDING, EIO_OK};
+  sensor.searches = {EIO_PENDING, EIO_NO_MATCH};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_CONVERT_FIRST, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_SEARCH_DUPLICATE, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_SEARCH_DUPLICATE, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  f.step(); TEST_ASSERT_EQUAL_INT(EN_WAIT_SECOND_FINGER, f.state());
+}
+
+
+void test_fsm_cancel_during_pending_store_applies_positive_ack() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.stores = {EIO_PENDING, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  f.step();
+  TEST_ASSERT_TRUE(sensor.operationPending());
+  TEST_ASSERT_EQUAL_INT(EN_STORE_MODEL, f.state());
+  f.cancel();
+  f.step();  // Drain the original store; do not issue another store or release probe yet.
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  TEST_ASSERT_TRUE(o.valid);
+  TEST_ASSERT_TRUE(o.has(1));
+  TEST_ASSERT_EQUAL_UINT16(1, f.enrolledCount());
+  TEST_ASSERT_EQUAL_INT(2, sensor.storeCalls);  // initial send + one poll; no second store command
+  TEST_ASSERT_TRUE(f.sensorReserved());
+  f.step();  // Finger is now confirmed removed by the fake sensor.
+  TEST_ASSERT_EQUAL_INT(EN_CANCELLED, f.state());
+}
+
+void test_fsm_cancel_during_ambiguous_store_invalidates_occupancy() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.stores = {EIO_PENDING, EIO_RETRYABLE};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  f.step();
+  TEST_ASSERT_TRUE(sensor.operationPending());
+  f.cancel();
+  f.step();  // Lost/failed store result is ambiguous; fail closed before release.
+  TEST_ASSERT_EQUAL_INT(EN_CANCEL_PENDING_RELEASE, f.state());
+  TEST_ASSERT_FALSE(o.valid);
+  TEST_ASSERT_TRUE(f.sensorReserved());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_CANCELLED, f.state());
+  TEST_ASSERT_EQUAL_INT(2, sensor.storeCalls);  // ambiguous store is never blindly repeated
+  TEST_ASSERT_FALSE(o.valid);  // Caller must refresh before attendance eligibility resumes.
+}
+
+void test_fsm_pending_store_does_not_invalidate_occupancy_or_repeat_write() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); validEmptyOccupancy(o);
+  sensor.stores = {EIO_PENDING, EIO_OK};
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  driveToStore(f);
+  TEST_ASSERT_EQUAL_INT(EN_STORE_MODEL, f.state());
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_STORE_MODEL, f.state());
+  TEST_ASSERT_TRUE(o.valid);
+  TEST_ASSERT_FALSE(o.has(1));
+  TEST_ASSERT_EQUAL_INT(1, sensor.storeCalls);
+  f.step();
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FINGER_REMOVAL, f.state());
+  TEST_ASSERT_TRUE(o.has(1));
+  TEST_ASSERT_EQUAL_INT(2, sensor.storeCalls);
+}
+
+void test_fsm_occupancy_refresh_does_not_requeue_prior_skips() {
+  Rig g; FakeEnrollSensor sensor; Occupancy o;
+  g.add(1, "A"); g.add(2, "B"); validEmptyOccupancy(o);
+  sensor.stores.push_back(EIO_RETRYABLE);
+  EnrollFsm f(g.r, o, sensor);
+  TEST_ASSERT_EQUAL_INT(ES_BEGIN_OK, f.begin(300, false));
+  TEST_ASSERT_TRUE(f.skipCurrent());
+  TEST_ASSERT_EQUAL_UINT16(2, f.currentId());
+  sensor.captures = {EIO_NO_FINGER, EIO_OK, EIO_NO_FINGER, EIO_OK};
+  f.step();  // release any finger before starting the next queue entry
+  TEST_ASSERT_EQUAL_INT(EN_WAIT_FIRST_FINGER, f.state());
+  driveToStore(f); f.step();
+  TEST_ASSERT_EQUAL_INT(EN_OCCUPANCY_REFRESH_REQUIRED, f.state());
+  o.begin(); o.finish();
+  TEST_ASSERT_TRUE(f.resumeAfterOccupancyRefresh());
+  TEST_ASSERT_EQUAL_UINT16(1, f.queueSize());
+  TEST_ASSERT_EQUAL_UINT16(2, f.currentId());
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_id_page_mapping_boundaries);
@@ -158,5 +665,34 @@ int main() {
   RUN_TEST(test_reconcile_counts);
   RUN_TEST(test_queue_and_slot_allocation);
   RUN_TEST(test_close_snapshot_excludes_unenrolled);
+  RUN_TEST(test_fsm_begin_requires_valid_occupancy);
+  RUN_TEST(test_fsm_queue_is_active_roster_minus_occupancy);
+  RUN_TEST(test_fsm_rejects_active_student_above_sensor_capacity);
+  RUN_TEST(test_fsm_enforces_45_active_student_limit);
+  RUN_TEST(test_fsm_empty_queue_finishes_immediately);
+  RUN_TEST(test_fsm_duplicate_blocks_store_and_reports_existing_id);
+  RUN_TEST(test_fsm_can_skip_duplicate_and_continue_queue);
+  RUN_TEST(test_fsm_stores_at_id_minus_one_and_advances_after_release);
+  RUN_TEST(test_fsm_waits_for_first_finger_removal_before_second_sample);
+  RUN_TEST(test_fsm_verify_toggle_off_skips_post_store_scan);
+  RUN_TEST(test_fsm_verify_toggle_on_requires_remove_then_matching_scan);
+  RUN_TEST(test_fsm_verify_failure_is_visible_and_can_continue_without_deleting);
+  RUN_TEST(test_fsm_no_finger_is_wait_not_an_error);
+  RUN_TEST(test_fsm_pauses_after_three_transient_errors_and_can_retry);
+  RUN_TEST(test_fsm_model_mismatch_restarts_first_finger_pair);
+  RUN_TEST(test_fsm_rechecks_occupancy_before_store);
+  RUN_TEST(test_fsm_rechecks_roster_before_store);
+  RUN_TEST(test_fsm_invalid_occupancy_before_store_blocks_write);
+  RUN_TEST(test_fsm_ambiguous_store_invalidates_and_refresh_detects_success);
+  RUN_TEST(test_fsm_ambiguous_store_refresh_without_target_requeues_student);
+  RUN_TEST(test_fsm_skip_is_blocked_while_sensor_command_is_pending);
+  RUN_TEST(test_fsm_cancel_waits_for_confirmed_finger_removal);
+  RUN_TEST(test_fsm_cancel_drains_inflight_command_before_release_fence);
+  RUN_TEST(test_fsm_cancel_sensor_fault_keeps_ownership_until_retry_and_release);
+  RUN_TEST(test_fsm_pending_sensor_results_do_not_advance_or_consume_retries);
+  RUN_TEST(test_fsm_cancel_during_pending_store_applies_positive_ack);
+  RUN_TEST(test_fsm_cancel_during_ambiguous_store_invalidates_occupancy);
+  RUN_TEST(test_fsm_pending_store_does_not_invalidate_occupancy_or_repeat_write);
+  RUN_TEST(test_fsm_occupancy_refresh_does_not_requeue_prior_skips);
   return UNITY_END();
 }

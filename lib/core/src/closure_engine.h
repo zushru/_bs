@@ -13,6 +13,9 @@ class IRoster {
 class ClosureEngine {
  public:
   ClosureEngine(LogStore& log, const Params& p, const Timetable& t, IRoster& r, uint16_t cap, int32_t termStartDay);
+  // Call after config validation and durable commit, serialized with engine operations.
+  // Preserves the existing LogIndex, last tick, and health-gap state.
+  void setSchedule(const Params& p, const Timetable& t, int32_t termStartDay);
   void onBoot(uint32_t now, uint32_t lastTickFromNvs);
   void onHealth(uint32_t now, bool healthy, uint16_t cause);
   bool onTick(uint32_t now);

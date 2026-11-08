@@ -16,6 +16,21 @@ size_t RosterStore::activeCount() const {
   for (uint16_t id = 1; id <= MAX_ID; id++) if (active(id)) c++;
   return c;
 }
+bool RosterStore::intervalAt(size_t index, RosterIntervalView& out) const {
+  if (index >= nIv_) return false;
+  out.studentId = iv_[index].id;
+  out.startDayInclusive = iv_[index].from;
+  out.endDayExclusive = iv_[index].to;
+  return true;
+}
+bool RosterStore::knownIdAt(size_t ordinal, uint16_t& outId) const {
+  for (uint16_t id = 1; id <= MAX_ID; id++) {
+    if (!known(id)) continue;
+    if (ordinal == 0) { outId = id; return true; }
+    --ordinal;
+  }
+  return false;
+}
 size_t RosterStore::nameOf(uint16_t id, char out[ROSTER_NAME_MAX + 1]) const {
   if (!known(id)) return 0;
   memcpy(out, n_[id].s, n_[id].len);

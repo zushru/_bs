@@ -271,6 +271,107 @@ static void jobParams() {
        (r[16] << 8) | r[17], (r[22] << 8) | r[23], ((r[24] << 8) | r[25]) * 9600);
 }
 
+// Read-only probe. Logs raw 32-byte index pages and both possible bit orders;
+// it deliberately does not decide which interpretation matches this sensor.
+static void logIndexCandidates(uint8_t tablePage, const uint8_t* bits,
+                               uint16_t capacity, bool lsbFirst) {
+  char pages[130];
+  size_t used = 0;
+  uint16_t found = 0;
+  bool clipped = false;
+  pages[0] = '\0';
+  const uint16_t base = (uint16_t)tablePage * 256U;
+  uint16_t valid = capacity > base ? (uint16_t)(capacity - base) : 0;
+  if (valid > 256) valid = 256;
+  for (uint16_t offset = 0; offset < valid; ++offset) {
+    const uint8_t bit = (uint8_t)(offset & 7U);
+    const uint8_t mask = lsbFirst ? (uint8_t)(1U << bit)
+                                  : (uint8_t)(0x80U >> bit);
+    if ((bits[offset >> 3] & mask) == 0) continue;
+    ++found;
+    if (used < sizeof pages - 1) {
+      const int n = snprintf(pages + used, sizeof pages - used,
+                             "%s%u", used ? "," : "", (unsigned)(base + offset));
+      if (n > 0 && (size_t)n < sizeof pages - used) used += (size_t)n;
+      else clipped = true;
+    } else {
+      clipped = true;
+    }
+  }
+  if (clipped && used < sizeof pages - 4) strcat(pages, ",...");
+  lg("index page %u %s candidate: count=%u pages=%s",
+     (unsigned)tablePage, lsbFirst ? "LSB-first" : "MSB-first", (unsigned)found,
+     found ? pages : "(none)");
+}
+
+static bool readIndexTablePage(uint8_t tablePage, uint16_t capacity) {
+  uint8_t r[64];
+  int n = afCmd(0x1F, &tablePage, 1, r, sizeof r, 1500);
+  if (n < 0) {
+    lg("index page %u transport error=%d", (unsigned)tablePage, n);
+    return false;
+  }
+  if (n < 12 || r[2] != 0xFF || r[3] != 0xFF || r[4] != 0xFF ||
+      r[5] != 0xFF || r[6] != 0x07) {
+    lg("index page %u invalid ACK header: n=%d address=%02X%02X%02X%02X type=%02X",
+       (unsigned)tablePage, n, (unsigned)r[2], (unsigned)r[3],
+       (unsigned)r[4], (unsigned)r[5], (unsigned)r[6]);
+    return false;
+  }
+  if (r[9] != 0x00) {
+    lg("index page %u sensor ACK code=%02X len=%02X%02X",
+       (unsigned)tablePage, (unsigned)r[9], (unsigned)r[7], (unsigned)r[8]);
+    return false;
+  }
+  if (n != 44 || r[7] != 0x00 || r[8] != 0x23) {
+    lg("index page %u invalid success payload: n=%d len=%02X%02X",
+       (unsigned)tablePage, n, (unsigned)r[7], (unsigned)r[8]);
+    return false;
+  }
+
+  lg("index page %u ACK OK; 32-byte bitmap follows", (unsigned)tablePage);
+  for (uint8_t group = 0; group < 4; ++group) {
+    char hex[32];
+    size_t at = 0;
+    for (uint8_t j = 0; j < 8; ++j) {
+      const int w = snprintf(hex + at, sizeof hex - at, "%s%02X",
+                             j ? " " : "", r[10 + group * 8 + j]);
+      if (w <= 0 || (size_t)w >= sizeof hex - at) break;
+      at += (size_t)w;
+    }
+    lg("index p=%u bytes %02u-%02u: %s", (unsigned)tablePage,
+       (unsigned)(group * 8), (unsigned)(group * 8 + 7), hex);
+  }
+  logIndexCandidates(tablePage, r + 10, capacity, true);
+  logIndexCandidates(tablePage, r + 10, capacity, false);
+  return true;
+}
+
+static void jobIndexTable() {
+  uint8_t r[40];
+  lg("ReadIndexTable probe: READ ONLY; no templates are changed");
+  if (!afAuthenticate()) return;
+  const int n = afCmd(0x0F, nullptr, 0, r, sizeof r, 1200);
+  const int code = cc(n, r);
+  if (code != 0 || n < 28) {
+    lg("index probe: system-parameter read failed code=%d (%s)",
+       code, afCodeName(code));
+    return;
+  }
+  const uint16_t capacity = (uint16_t)((r[14] << 8) | r[15]);
+  if (capacity == 0 || capacity > 1024) {
+    lg("index probe: unsupported reported capacity=%u", (unsigned)capacity);
+    return;
+  }
+  const uint8_t tablePages = (uint8_t)((capacity + 255U) / 256U);
+  lg("index probe: capacity=%u; reading %u index page(s)",
+     (unsigned)capacity, (unsigned)tablePages);
+  for (uint8_t page = 0; page < tablePages; ++page) {
+    if (!readIndexTablePage(page, capacity)) return;
+  }
+  lg("index probe complete. Compare candidate page lists with known sensor slots.");
+}
+
 static int afSearch(int& page, int& score) {
   uint8_t r[20], d[1] = {1};
   int n = afCmd(0x02, d, 1, r, sizeof r, 1000);
@@ -454,6 +555,7 @@ static const char* jobName(int j) {
     case 8: return "Beep 100";
     case 9: return "Template round-trip";
     case 10: return "10 scans AP OFF";
+    case 11: return "Read index table (read-only)";
     default: return "Unknown job";
   }
 }
@@ -467,6 +569,7 @@ static void runJob(int j) {
     case 5: jobEnroll(); break;
     case 6: jobBurst(false); break;
     case 10: jobBurst(true); break;
+    case 11: jobIndexTable(); break;
     case 7: lg("beep 50 ms"); beep(50); break;
     case 8: lg("beep 100 ms"); beep(100); break;
     case 9: jobTemplate(); break;
@@ -481,7 +584,7 @@ static const char PAGE[] PROGMEM = R"HTML(<!doctype html>
 <div class=actions><input id=n placeholder="Note (e.g. VCC=3V3)"><button onclick="note()">Add</button></div>
 <textarea id=t readonly></textarea><div class=actions><button onclick="cp()">Copy</button><a href=/dl download=diag.txt>Download log</a><button onclick="fetch('/clr')">Clear</button></div>
 <script>
-const J=[[1,'I2C scan'],[2,'RTC read'],[3,'GPIO4 8s'],[4,'AS608 params'],[5,'Enroll slot 1'],[6,'10 scans'],[7,'Beep 50'],[8,'Beep 100'],[9,'Template round-trip'],[10,'10 scans AP OFF']];
+const J=[[1,'I2C scan'],[2,'RTC read'],[3,'GPIO4 8s'],[4,'AS608 params'],[5,'Enroll slot 1'],[6,'10 scans'],[7,'Beep 50'],[8,'Beep 100'],[9,'Template round-trip'],[10,'10 scans AP OFF'],[11,'Read index table (read-only)']];
 const b=document.getElementById('b'),t=document.getElementById('t'),s=document.getElementById('s');
 const controls=[];
 J.forEach(function(x){

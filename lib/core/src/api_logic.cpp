@@ -93,12 +93,17 @@ void PinLockout::fail(uint32_t nowS) {
 
 // ---------------- TokenTable ----------------
 void TokenTable::revokeAll() { memset(s_, 0, sizeof s_); evicted_ = false; }
-bool TokenTable::issue(const uint8_t rnd[16], uint32_t nowS) {
+bool TokenTable::canIssue(const uint8_t rnd[16]) const {
+  if (rnd == nullptr) return false;
   uint8_t z = 0;
   for (int i = 0; i < 16; i++) z |= rnd[i];
-  evicted_ = false;
   if (z == 0) return false;
   for (int i = 0; i < 2; i++) if (s_[i].used && memcmp(s_[i].t, rnd, 16) == 0) return false;
+  return true;
+}
+bool TokenTable::issue(const uint8_t rnd[16], uint32_t nowS) {
+  evicted_ = false;
+  if (!canIssue(rnd)) return false;
   int slot = -1;
   for (int i = 0; i < 2 && slot < 0; i++) if (!live_(s_[i], nowS)) slot = i;
   if (slot < 0) {                                          // both live: displace the least recently used

@@ -10,6 +10,7 @@ struct OpenInfo {
   uint32_t tornBytes;
   uint32_t droppedGroup;
   int32_t corruptAt;
+  uint64_t generation;   // identifies the specific LogStore::open() result
 };
 // Derived state (indexes, caches) follows the log. onReset = log (re)opened: discard and replay.
 class LogObserver {
@@ -20,7 +21,8 @@ class LogObserver {
 };
 class LogStore {
  public:
-  explicit LogStore(IStorage& s) : s_(s), count_(0), nextSeq_(1), baseline_(0), faulted_(true), nobs_(0) {
+  explicit LogStore(IStorage& s) : s_(s), count_(0), nextSeq_(1), baseline_(0),
+      openGeneration_(0), faulted_(true), nobs_(0) {
     for (size_t i = 0; i < MAX_OBSERVERS; i++) obs_[i] = nullptr;
   }
   OpenInfo open();
@@ -30,6 +32,7 @@ class LogStore {
   size_t count() const { return count_; }
   uint32_t lastSeq() const { return nextSeq_ - 1; }
   uint32_t baselineEpoch() const { return baseline_; }
+  uint64_t openGeneration() const { return openGeneration_; }
   bool faulted() const { return faulted_; }
  private:
   void track(const Event& e);
@@ -38,6 +41,7 @@ class LogStore {
   IStorage& s_;
   size_t count_;
   uint32_t nextSeq_, baseline_;
+  uint64_t openGeneration_;
   bool faulted_;
   LogObserver* obs_[MAX_OBSERVERS];
   size_t nobs_;

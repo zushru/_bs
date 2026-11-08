@@ -1,0 +1,10 @@
+--- a/lib/core/src/event_group_audit.cpp
++++ b/lib/core/src/event_group_audit.cpp
+@@ -1,5 +1,7 @@
+ #include "event_group_audit.h"
+ #include "event_codec.h"
++#include "day_view.h"
++#include "roster_store.h"
+ 
+ namespace att {
+ namespace {

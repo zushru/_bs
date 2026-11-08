@@ -52,6 +52,7 @@ const uint32_t TOKEN_IDLE_S = 900;
 class TokenTable {
  public:
   TokenTable() { revokeAll(); }
+  bool canIssue(const uint8_t rnd[16]) const;           // read-only preflight; no slot or LRU mutation
   bool issue(const uint8_t rnd[16], uint32_t nowS);    // false: all-zero (RNG failure) or duplicate token
   bool lastIssueEvicted() const { return evicted_; }   // a live session was displaced (least recently used)
   bool check(const uint8_t tok[16], uint32_t nowS);    // constant-time; refreshes the idle timer on success

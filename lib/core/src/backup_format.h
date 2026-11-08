@@ -93,8 +93,10 @@ class RestoreValidator : public IByteSink {
   bool ok() const { return ok_ && !err_; }
   uint32_t records() const { return nrec_; }
   uint32_t lastSeq() const { return lastSeq_; }
+  uint32_t recordsCrc() const { return recordsCrc_.value(); }
   uint32_t cfgSeq() const { return cfgSeq_; }
   const Config& config() const { return cfg_; }
+  IStorage* stagingStorage() const { return stg_; }
  private:
   bool step_();
   bool fail_() { err_ = true; return false; }
@@ -102,7 +104,7 @@ class RestoreValidator : public IByteSink {
   LogObserver* obs_[4]; size_t nobs_;
   int st_; size_t need_, have_;
   uint8_t buf_[CFG_SLOT_SIZE];
-  Crc32 crc_; Config cfg_; uint32_t cfgSeq_, nrec_, left_, lastSeq_;
+  Crc32 crc_, recordsCrc_; Config cfg_; uint32_t cfgSeq_, nrec_, left_, lastSeq_;
   bool prevMore_, ok_, err_;
 };
 // A backup that was never finished, or hit a write error, can never be acknowledged.

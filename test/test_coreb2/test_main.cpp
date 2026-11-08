@@ -22,8 +22,8 @@ static void randomAppend(LogStore& l, int32_t d0) {
   uint32_t t = E(day, (int)(rnd() % 1440));
   switch (rnd() % 6) {
     case 0: { Event e = {EV_SCAN, makeFlags(sess, 1 + rnd() % 2, false, false, false), (uint16_t)(rnd() % 62), t, 0, 100}; l.append(&e, 1); break; }
-    case 1: { Event e = {EV_MARK, makeFlags(sess, rnd() % 4, false, false, false), (uint16_t)(rnd() % 62), t, (uint16_t)day}; l.append(&e, 1); break; }
-    case 2: { Event e = {rnd() % 2 ? EV_NOCLASS_SET : EV_NOCLASS_CLEAR, makeFlags(sess, 0, false, false, rnd() % 2), 0, t, (uint16_t)day}; l.append(&e, 1); break; }
+    case 1: { Event e = {EV_MARK, makeFlags(sess, rnd() % 4, false, false, false), (uint16_t)(rnd() % 62), t, (uint16_t)day, 0}; l.append(&e, 1); break; }
+    case 2: { Event e = {rnd() % 2 ? EV_NOCLASS_SET : EV_NOCLASS_CLEAR, makeFlags(sess, 0, false, false, rnd() % 2), 0, t, (uint16_t)day, 0}; l.append(&e, 1); break; }
     case 3: {
       Event g[6];
       g[0] = Event{EV_CLOSE, makeFlags(sess, 0, rnd() % 2, true, false), (uint16_t)(rnd() % 61), t, 0, (uint16_t)day};

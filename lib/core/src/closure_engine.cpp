@@ -5,6 +5,11 @@ ClosureEngine::ClosureEngine(LogStore& log, const Params& p, const Timetable& t,
       lastTick_(0), badSince_(0), badCause_(0), bad_(false), pending_(false), indexOk_(false) {
   indexOk_ = log_.attach(&index_);      // false = no observer slot: this engine must refuse to close
 }
+void ClosureEngine::setSchedule(const Params& p, const Timetable& t, int32_t term) {
+  p_ = p;
+  t_ = t;
+  term_ = term;
+}
 // Only the part of [from,to) that touches scan windows can change coverage. Clip to the span from the first
 // overlapped window start to the last overlapped window end. Nights and weekends with no window are dropped.
 bool ClosureEngine::clipToWindows(uint32_t from, uint32_t to, uint32_t& cf, uint32_t& ct) const {

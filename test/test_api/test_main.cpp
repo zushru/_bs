@@ -1,8 +1,10 @@
 #include <limits.h>
 #include <unity.h>
 #include <string.h>
+#include <string>
 #include <vector>
 #include "api_logic.h"
+#include "pin_auth.h"
 using namespace att;
 
 void setUp() {}
@@ -183,6 +185,30 @@ void test_token_rejects_wrong_zero_and_neighbours() {
   TEST_ASSERT_TRUE(t.check(a, 11));
   TEST_ASSERT_FALSE(t.issue(z, 12));                      // RNG failure never creates a session
   TEST_ASSERT_FALSE(t.issue(a, 12));                      // duplicate token
+}
+void test_token_can_issue_rejects_zero_and_duplicate_without_mutation() {
+  TokenTable t; uint8_t zero[16] = {0}; uint8_t a[16]; tk(a, 41);
+  TEST_ASSERT_FALSE(t.canIssue(nullptr));
+  TEST_ASSERT_FALSE(t.canIssue(zero));
+  TEST_ASSERT_EQUAL_INT(0, t.active(10));
+  TEST_ASSERT_TRUE(t.issue(a, 10));
+  TEST_ASSERT_FALSE(t.canIssue(a));
+  TEST_ASSERT_EQUAL_INT(1, t.active(11));
+  TEST_ASSERT_TRUE(t.check(a, 11));
+}
+void test_token_can_issue_accepts_distinct_token_without_mutating_lru() {
+  TokenTable t; uint8_t a[16], b[16], c[16];
+  tk(a, 1); tk(b, 2); tk(c, 3);
+  TEST_ASSERT_TRUE(t.issue(a, 1));
+  TEST_ASSERT_TRUE(t.issue(b, 2));
+  TEST_ASSERT_TRUE(t.check(a, 3));  // a is MRU; b is LRU
+  TEST_ASSERT_TRUE(t.canIssue(c));  // preflight must not change LRU order
+  TEST_ASSERT_EQUAL_INT(2, t.active(4));
+  TEST_ASSERT_TRUE(t.issue(c, 4));  // b must still be the displaced session
+  TEST_ASSERT_TRUE(t.lastIssueEvicted());
+  TEST_ASSERT_TRUE(t.check(a, 5));
+  TEST_ASSERT_FALSE(t.check(b, 5));
+  TEST_ASSERT_TRUE(t.check(c, 5));
 }
 void test_token_two_sessions_and_lru_eviction() {
   TokenTable t; uint8_t a[16], b[16], c[16];
@@ -417,6 +443,213 @@ void test_window_open_now() {
   TEST_ASSERT_FALSE(windowOpenNow(t, p, dayStartEpoch(mon + 5, 480) + 9 * 3600));          // Saturday
 }
 
+
+// ---- enforced PIN-attempt sequencing (new adapter boundary) ----
+struct FakePinStore : IPinAttemptStore {
+  uint16_t persisted;
+  bool loadOk;
+  int failPersistAt;
+  int persistCalls;
+  std::vector<char>* order;
+  FakePinStore() : persisted(0), loadOk(true), failPersistAt(-1), persistCalls(0), order(nullptr) {}
+  bool loadFailureCount(uint16_t& out) override {
+    if (order) order->push_back('l');
+    if (!loadOk) return false;
+    out = persisted;
+    return true;
+  }
+  bool persistFailureCount(uint16_t value) override {
+    if (order) order->push_back('p');
+    ++persistCalls;
+    if (persistCalls == failPersistAt) return false;
+    persisted = value;
+    return true;
+  }
+};
+struct FakePinVerifier : IPinVerifier {
+  PinVerifyOutcome outcome;
+  std::vector<char>* order;
+  FakePinStore* observeStore;
+  uint16_t observedPersisted;
+  int calls;
+  FakePinVerifier() : outcome(PV_MATCH), order(nullptr), observeStore(nullptr), observedPersisted(0), calls(0) {}
+  PinVerifyOutcome verify(const char*, size_t) override {
+    if (order) order->push_back('v');
+    if (observeStore) observedPersisted = observeStore->persisted;
+    ++calls;
+    return outcome;
+  }
+};
+struct FakePinAction : IPinSuccessAction {
+  PinActionOutcome outcome;
+  std::vector<char>* order;
+  FakePinStore* observeStore;
+  uint16_t observedPersisted;
+  int calls;
+  FakePinAction() : outcome(PA_DONE), order(nullptr), observeStore(nullptr), observedPersisted(0), calls(0) {}
+  PinActionOutcome run() override {
+    if (order) order->push_back('a');
+    if (observeStore) observedPersisted = observeStore->persisted;
+    ++calls;
+    return outcome;
+  }
+};
+struct FakePinWriter : IAdminPinWriter {
+  PinActionOutcome outcome;
+  std::vector<char>* order;
+  FakePinStore* observeStore;
+  uint16_t observedPersisted;
+  int calls;
+  std::string committed;
+  FakePinWriter() : outcome(PA_DONE), order(nullptr), observeStore(nullptr), observedPersisted(0), calls(0) {}
+  PinActionOutcome commitNewPin(const char* pin, size_t n) override {
+    if (order) order->push_back('w');
+    if (observeStore) observedPersisted = observeStore->persisted;
+    ++calls;
+    committed.assign(pin, n);
+    return outcome;
+  }
+};
+void test_pin_auth_boot_fails_closed_when_counter_unreadable() {
+  FakePinStore store; store.loadOk = false;
+  PinAuthCoordinator auth(store);
+  TEST_ASSERT_FALSE(auth.boot(100));
+  TEST_ASSERT_TRUE(auth.faulted());
+  FakePinVerifier verifier; FakePinAction action;
+  TEST_ASSERT_EQUAL_INT(PAC_NOT_READY, auth.authenticateAndRun("483920", 6, 100, verifier, action).code);
+  TEST_ASSERT_EQUAL_INT(0, verifier.calls);
+  TEST_ASSERT_EQUAL_INT(0, action.calls);
+}
+void test_pin_auth_persists_attempt_and_reset_before_action() {
+  std::vector<char> order;
+  FakePinStore store; store.order = &order;
+  FakePinVerifier verifier; verifier.order = &order; verifier.observeStore = &store;
+  FakePinAction action; action.order = &order; action.observeStore = &store;
+  PinAuthCoordinator auth(store);
+  TEST_ASSERT_TRUE(auth.boot(10));
+  PinAuthResult r = auth.authenticateAndRun("483920", 6, 11, verifier, action);
+  TEST_ASSERT_EQUAL_INT(PAC_OK, r.code);
+  TEST_ASSERT_EQUAL_UINT16(0, store.persisted);
+  TEST_ASSERT_EQUAL_INT(1, verifier.calls);
+  TEST_ASSERT_EQUAL_INT(1, action.calls);
+  TEST_ASSERT_EQUAL_UINT16(1, verifier.observedPersisted); // verifier sees the increment already durable
+  TEST_ASSERT_EQUAL_UINT16(0, action.observedPersisted);    // action sees the durable reset
+  TEST_ASSERT_EQUAL_UINT32(5, order.size());
+  TEST_ASSERT_EQUAL_INT('l', order[0]);
+  TEST_ASSERT_EQUAL_INT('p', order[1]);
+  TEST_ASSERT_EQUAL_INT('v', order[2]);
+  TEST_ASSERT_EQUAL_INT('p', order[3]);
+  TEST_ASSERT_EQUAL_INT('a', order[4]);
+}
+void test_pin_auth_bad_secret_is_persisted_and_action_never_runs() {
+  FakePinStore store; FakePinVerifier verifier; FakePinAction action;
+  verifier.outcome = PV_MISMATCH;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  PinAuthResult r = auth.authenticateAndRun("483920", 6, 1, verifier, action);
+  TEST_ASSERT_EQUAL_INT(PAC_BAD_SECRET, r.code);
+  TEST_ASSERT_EQUAL_UINT16(1, store.persisted);
+  TEST_ASSERT_EQUAL_INT(0, action.calls);
+  TEST_ASSERT_FALSE(auth.faulted());
+}
+void test_pin_auth_lockout_and_reboot_restore() {
+  FakePinStore store; store.persisted = 4;
+  FakePinVerifier verifier; verifier.outcome = PV_MISMATCH;
+  FakePinAction action;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(1000));
+  TEST_ASSERT_EQUAL_INT(PAC_BAD_SECRET, auth.authenticateAndRun("483920", 6, 1000, verifier, action).code);
+  TEST_ASSERT_EQUAL_UINT16(5, store.persisted);
+  PinAuthResult locked = auth.authenticateAndRun("483920", 6, 1001, verifier, action);
+  TEST_ASSERT_EQUAL_INT(PAC_LOCKED, locked.code);
+  TEST_ASSERT_EQUAL_UINT32(59, locked.retryAfterS);
+  TEST_ASSERT_EQUAL_INT(1, verifier.calls);
+  FakePinStore rebootStore; rebootStore.persisted = store.persisted;
+  PinAuthCoordinator rebooted(rebootStore); TEST_ASSERT_TRUE(rebooted.boot(2000));
+  TEST_ASSERT_EQUAL_INT(PAC_LOCKED, rebooted.authenticateAndRun("483920", 6, 2000, verifier, action).code);
+  TEST_ASSERT_EQUAL_UINT32(60, rebooted.authenticateAndRun("483920", 6, 2000, verifier, action).retryAfterS);
+}
+void test_pin_auth_attempt_persist_failure_latches_before_verify() {
+  FakePinStore store; store.failPersistAt = 1;
+  FakePinVerifier verifier; FakePinAction action;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_STORAGE_ERROR, auth.authenticateAndRun("483920", 6, 1, verifier, action).code);
+  TEST_ASSERT_TRUE(auth.faulted());
+  TEST_ASSERT_EQUAL_INT(0, verifier.calls);
+  TEST_ASSERT_EQUAL_INT(0, action.calls);
+}
+void test_pin_auth_reset_persist_failure_blocks_action() {
+  FakePinStore store; store.failPersistAt = 2;
+  FakePinVerifier verifier; FakePinAction action;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_STORAGE_ERROR, auth.authenticateAndRun("483920", 6, 1, verifier, action).code);
+  TEST_ASSERT_TRUE(auth.faulted());
+  TEST_ASSERT_EQUAL_INT(1, verifier.calls);
+  TEST_ASSERT_EQUAL_INT(0, action.calls);
+}
+void test_pin_auth_verifier_error_latches_and_preserves_attempt() {
+  FakePinStore store; FakePinVerifier verifier; FakePinAction action;
+  verifier.outcome = PV_ERROR;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_VERIFY_ERROR, auth.authenticateAndRun("483920", 6, 1, verifier, action).code);
+  TEST_ASSERT_TRUE(auth.faulted());
+  TEST_ASSERT_EQUAL_UINT16(1, store.persisted);
+  TEST_ASSERT_EQUAL_INT(0, action.calls);
+}
+void test_pin_auth_invalid_pin_does_not_consume_attempt() {
+  FakePinStore store; FakePinVerifier verifier; FakePinAction action;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_BAD_INPUT, auth.authenticateAndRun("12a456", 6, 1, verifier, action).code);
+  TEST_ASSERT_EQUAL_INT(0, store.persistCalls);
+  TEST_ASSERT_EQUAL_INT(0, verifier.calls);
+}
+void test_pin_auth_indeterminate_action_latches() {
+  FakePinStore store; FakePinVerifier verifier; FakePinAction action;
+  action.outcome = PA_INDETERMINATE;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_ACTION_INDETERMINATE, auth.authenticateAndRun("483920", 6, 1, verifier, action).code);
+  TEST_ASSERT_TRUE(auth.faulted());
+}
+void test_pin_change_requires_old_pin_and_commits_after_reset() {
+  std::vector<char> order;
+  FakePinStore store; store.order = &order;
+  FakePinVerifier verifier; verifier.order = &order; verifier.observeStore = &store;
+  FakePinWriter writer; writer.order = &order; writer.observeStore = &store;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_OK, auth.changeAdminPin("483920", 6, "627194", 6, 1, verifier, writer).code);
+  TEST_ASSERT_EQUAL_INT(1, verifier.calls);
+  TEST_ASSERT_EQUAL_INT(1, writer.calls);
+  TEST_ASSERT_EQUAL_UINT16(1, verifier.observedPersisted);
+  TEST_ASSERT_EQUAL_UINT16(0, writer.observedPersisted);
+  TEST_ASSERT_EQUAL_STRING("627194", writer.committed.c_str());
+  TEST_ASSERT_EQUAL_UINT32(5, order.size());
+  TEST_ASSERT_EQUAL_INT('p', order[1]);
+  TEST_ASSERT_EQUAL_INT('v', order[2]);
+  TEST_ASSERT_EQUAL_INT('p', order[3]);
+  TEST_ASSERT_EQUAL_INT('w', order[4]);
+}
+void test_pin_change_rejects_weak_new_pin_before_old_pin_attempt() {
+  FakePinStore store; FakePinVerifier verifier; FakePinWriter writer;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_WEAK_NEW_PIN, auth.changeAdminPin("483920", 6, "123456", 6, 1, verifier, writer).code);
+  TEST_ASSERT_EQUAL_INT(0, store.persistCalls);
+  TEST_ASSERT_EQUAL_INT(0, verifier.calls);
+  TEST_ASSERT_EQUAL_INT(0, writer.calls);
+}
+void test_pin_change_wrong_old_pin_never_writes_new_pin() {
+  FakePinStore store; FakePinVerifier verifier; FakePinWriter writer;
+  verifier.outcome = PV_MISMATCH;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_BAD_SECRET, auth.changeAdminPin("111111", 6, "627194", 6, 1, verifier, writer).code);
+  TEST_ASSERT_EQUAL_INT(0, writer.calls);
+  TEST_ASSERT_EQUAL_UINT16(1, store.persisted);
+}
+void test_pin_change_indeterminate_write_latches() {
+  FakePinStore store; FakePinVerifier verifier; FakePinWriter writer;
+  writer.outcome = PA_INDETERMINATE;
+  PinAuthCoordinator auth(store); TEST_ASSERT_TRUE(auth.boot(0));
+  TEST_ASSERT_EQUAL_INT(PAC_ACTION_INDETERMINATE, auth.changeAdminPin("483920", 6, "627194", 6, 1, verifier, writer).code);
+  TEST_ASSERT_TRUE(auth.faulted());
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_authorize_matches_oracle_everywhere);
@@ -427,6 +660,8 @@ int main() {
   RUN_TEST(test_lockout_boot_restore_and_saturation);
   RUN_TEST(test_token_basics_and_expiry_boundary);
   RUN_TEST(test_token_rejects_wrong_zero_and_neighbours);
+  RUN_TEST(test_token_can_issue_rejects_zero_and_duplicate_without_mutation);
+  RUN_TEST(test_token_can_issue_accepts_distinct_token_without_mutating_lru);
   RUN_TEST(test_token_two_sessions_and_lru_eviction);
   RUN_TEST(test_reqring_replay_mismatch_inflight);
   RUN_TEST(test_reqring_eviction_and_leak_guard);
@@ -439,5 +674,18 @@ int main() {
   RUN_TEST(test_config_gate_order_and_rules);
   RUN_TEST(test_restore_gate_and_helpers);
   RUN_TEST(test_window_open_now);
+  RUN_TEST(test_pin_auth_boot_fails_closed_when_counter_unreadable);
+  RUN_TEST(test_pin_auth_persists_attempt_and_reset_before_action);
+  RUN_TEST(test_pin_auth_bad_secret_is_persisted_and_action_never_runs);
+  RUN_TEST(test_pin_auth_lockout_and_reboot_restore);
+  RUN_TEST(test_pin_auth_attempt_persist_failure_latches_before_verify);
+  RUN_TEST(test_pin_auth_reset_persist_failure_blocks_action);
+  RUN_TEST(test_pin_auth_verifier_error_latches_and_preserves_attempt);
+  RUN_TEST(test_pin_auth_invalid_pin_does_not_consume_attempt);
+  RUN_TEST(test_pin_auth_indeterminate_action_latches);
+  RUN_TEST(test_pin_change_requires_old_pin_and_commits_after_reset);
+  RUN_TEST(test_pin_change_rejects_weak_new_pin_before_old_pin_attempt);
+  RUN_TEST(test_pin_change_wrong_old_pin_never_writes_new_pin);
+  RUN_TEST(test_pin_change_indeterminate_write_latches);
   return UNITY_END();
 }

@@ -40,9 +40,9 @@ blank (all 0xFF) -> CD_BLANK; magic -> CD_BAD_MAGIC; version -> CD_BAD_VER; leng
 Write to the non-active slot with seq+1, read it back, compare with configEqual, and only then report success. A torn write leaves the old slot active.
 
 ## Schedule-change gate: canApply(cur, next, windowOpen, unclosedPast)
-Schedule fields = utcOffsetMin, lateMin, scanLeadMin, termStart, termEnd, every timetable slot. Same schedule -> OK. Different schedule -> REFUSED_WINDOW_OPEN if a window is open, REFUSED_UNCLOSED if a past session is unclosed, else OK.
+Schedule fields = utcOffsetMin, lateMin, scanLeadMin, termStart, termEnd, every timetable slot. Same schedule -> OK. Different schedule -> REFUSED_WINDOW_OPEN if a window is open, REFUSED_UNCLOSED if a past session is unclosed, else OK. `ClosureEngine` consumes `utcOffsetMin` and `scanLeadMin` from Params; it does not use `lateMin`, which belongs to scan classification.
 
 ## Known gaps
-- C1 (CRITICAL.md): the ClosureEngine does not receive a changed schedule. This spec's gate is necessary but not sufficient.
+- C1 core support: `ClosureEngine::setSchedule(params, timetable, termStartDay)` updates the existing engine without replacing its `LogIndex` or clearing runtime state. The caller must invoke it only after validation, `canApply()`, and successful durable config commit, and must serialize the call with engine operations. The v0.2.13 ESP32 NVS slot adapter and first-provision path now exist as standalone source, but no production boot caller or HealthFsm fault wiring exists; end-to-end schedule application remains pending.
 - seq wraps at 2^32 with no handling (about 4 billion writes; not a practical risk, noted only).
-- The two booleans in canApply are supplied by the caller. A wrong value silently bypasses the guard.
+- The two booleans in canApply are supplied by the caller. A wrong value silently bypasses the guard. v0.2.16 adds a current-window helper, but C17 blocks safe historical `unclosedPast` derivation until schedule-effective history is persisted (E2 is DELEGATED). C18 also leaves `termEnd` inclusive/exclusive semantics unresolved and shows the closure sweep is not term-bounded. Keep production schedule changes disabled until both findings are resolved.

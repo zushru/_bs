@@ -22,7 +22,18 @@ The version-1 layout (template section) is rejected.
 ## RestoreValidator (streams into a staging storage)
 Checks in order: magic, version, fsVersion == expected, config slot decodes, record count, every record decodes with seq == previous + 1, no unfinished commit group at the end, crc32 trailer, no trailing bytes. Optional observers (up to 4, added before any byte is fed) receive each validated record. Use one RosterStore observer and check malformed() == 0 and overflow() == false before accepting.
 
+## Semantic staged replay audit (v0.2.14)
+`RestoreReplayAudit` is a separate, one-shot step after `RestoreValidator.ok()`:
+- It must be constructed only after `RestoreValidator.ok()`; it snapshots the validated config at construction. It requires the exact same `IStorage` object held by the validator and exact `records * REC_SIZE` stage length.
+- It computes CRC32 over the staged record bytes and compares it with the CRC32 accumulated over the bytes accepted by the validator. This detects accidental mutation between validation and replay, including a changed record whose per-record CRC was recomputed. It is not a cryptographic MAC and does not protect against concurrent mutation during replay.
+- It opens a fresh `LogStore` on staging and attaches a fresh `RosterStore`, the `ClosureEngine`-owned `LogIndex`, and `RestoreGroupAudit` before open/replay.
+- It rejects storage read failures, record CRC/sequence faults, any torn/dropped/corrupt tail, count/last-sequence mismatch, unfinished or malformed event groups, malformed/overflowed roster state, and gap/close index overflow.
+- Current commit-group shapes checked are: ROSTER SET header plus four payloads; ROSTER activate/deactivate single records; CLOSE plus zero to five bitmap payloads with exact bitmap population count and no unused high ID bits; GAP chunk groups of one cause with positive durations, contiguous chunks and no 32-bit end overflow, optionally followed by a valid CLOCK_SET pair; and standalone two-record CLOCK_SET pairs. Other current single-record event types must not carry MORE. Payloads cannot appear independently.
+- The audit never calls `ClosureEngine::step()`: that method may append missing CLOSE records and would mutate the restored history. It rebuilds only the existing `LogIndex`; it does not synthesize closures or validate all attendance/business rules.
+- `LogStore::open()` can truncate a bad stage tail before the audit rejects it. The audit is one-shot; discard a failed stage rather than retrying it in place.
+- Allocate the audit statically or on the heap because `RosterStore` and `ClosureEngine` include fixed-size tables. The caller must exclusively own/freeze staging from validation through audit and any future swap. No stage lock is implemented here.
+
 ## Known gaps
-- C2 (CRITICAL.md): no restore orchestrator, no atomic swap, no LogIndex replay, no closure replay of the staged log.
+- C2 (CRITICAL.md): no restore transaction coordinator, recovery journal, atomic storage swap, post-swap reopen, reboot recovery or acknowledgement protocol. `RestoreReplayAudit` is a pre-swap check only.
 - KDF iteration count not chosen. Time to derive on the ESP32 unmeasured.
 - Crypto adapter (mbedtls AES-GCM, PBKDF2) not written. Its call signatures are UNVERIFIED.

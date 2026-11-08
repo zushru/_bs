@@ -327,6 +327,59 @@ void test_failed_boot_gap_is_retried() {
   r.eng.onHealth(E(FRI, 501), true, GAP_SENSOR);             // retried on recovery
   TEST_ASSERT_EQUAL_INT(1, r.countType(EV_GAP));
 }
+void test_engine_set_schedule_updates_window_and_session_end() {
+  Rig r;
+  Params nextP = {0, 30, 30};
+  Timetable nextT = defaultTimetable();
+  nextT.day[4][0].start = 500;  // Friday 08:20
+  nextT.day[4][0].end = 765;    // Friday 12:45
+  r.eng.setSchedule(nextP, nextT, FRI);
+
+  TEST_ASSERT_FALSE(r.eng.onTick(E(FRI, 469)));  // New window opens at 07:50, not old 07:45.
+  TEST_ASSERT_TRUE(r.eng.onTick(E(FRI, 470)));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 764)));
+  TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 765)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+  Event e;
+  bool found = false;
+  for (size_t i = 0; i < r.log.count(); i++) {
+    TEST_ASSERT_TRUE(r.log.at(i, e));
+    if (e.type == EV_CLOSE) {
+      found = true;
+      TEST_ASSERT_EQUAL_INT(FRI, e.b);
+      TEST_ASSERT_EQUAL_INT(0, flagSession(e.flags));
+    }
+  }
+  TEST_ASSERT_TRUE(found);
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 766)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));  // Existing LogIndex still observes the close.
+}
+void test_engine_set_schedule_updates_utc_offset() {
+  Rig r;
+  Params nextP = {480, 30, 15};
+  Timetable nextT = defaultTimetable();
+  r.eng.setSchedule(nextP, nextT, FRI);
+
+  // 04:29 UTC is 12:29 PHT; the AM session closes at 12:30 PHT.
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 269)));
+  TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 270)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+}
+void test_engine_set_schedule_updates_term_start() {
+  Rig r(FRI - 10);
+  Params nextP = {0, 30, 15};
+  Timetable nextT = defaultTimetable();
+  r.eng.setSchedule(nextP, nextT, FRI);
+
+  // Monday is after the old term start but before the newly configured term start.
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI - 4, 1000)));
+  TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 750)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+}
+
 void test_no_close_for_weekend_or_before_term() {
   Rig r(FRI);
   r.eng.onBoot(E(FRI, 400), 0);
@@ -546,6 +599,9 @@ int main() {
   RUN_TEST(test_closure_waits_while_unhealthy_then_recovers);
   RUN_TEST(test_storage_failure_during_closure);
   RUN_TEST(test_failed_boot_gap_is_retried);
+  RUN_TEST(test_engine_set_schedule_updates_window_and_session_end);
+  RUN_TEST(test_engine_set_schedule_updates_utc_offset);
+  RUN_TEST(test_engine_set_schedule_updates_term_start);
   RUN_TEST(test_no_close_for_weekend_or_before_term);
   RUN_TEST(test_long_gap_is_chunked_and_marks_old_sessions);
   RUN_TEST(test_tick_only_in_window_and_every_300s);

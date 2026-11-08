@@ -32,8 +32,11 @@ bool LogStore::attach(LogObserver* o) {
   return true;
 }
 OpenInfo LogStore::open() {
-  OpenInfo r = {false, 0, 0, 0, 0, 0, -1};
-  faulted_ = true; count_ = 0; nextSeq_ = 1; baseline_ = 0;
+  OpenInfo r = {false, 0, 0, 0, 0, 0, -1, 0};
+  faulted_ = true;
+  if (openGeneration_ == ~(uint64_t)0) return r;  // refuse generation reuse
+  r.generation = ++openGeneration_;
+  count_ = 0; nextSeq_ = 1; baseline_ = 0;
   notifyReset();
   size_t size = s_.size();
   size_t n = size / REC_SIZE;
