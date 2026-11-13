@@ -1,3 +1,11 @@
+## 2026-11-13 — ATT-P15-PARSER-CHECKER-ALIGN-01 — align pinned WebServer guard expectations (source only)
+
+- Read-only reconstruction of the committed `tools/apply_pinned_webserver_patch.py` transformation matched its pristine installed `Parsing.cpp` hash, all six unique anchors, and its pinned after-image hash (`bead61f5…`). The framework source remained unchanged and no recovery backup was created.
+- Corrected `tools/check_att_boot_shell.py`, which still expected an older after-image hash and omitted the duplicate Content-Type and parser-level 400/413/408 response assertions. This aligns the guard with the committed installer; the checker was not executed.
+- Recounted current native test source at 894 registrations across 47 suites and corrected the stale 884 entry in `docs/TESTS.md`/`WORKING_MEMORY.md`. Registration inventory is not test-pass evidence.
+- Clarified the first-run HTTP specification: parser failures that return false bypass `RequestHandler::handle()`, so the parser itself sends its bounded error response. The setup route remains unregistered and the target remains GET-only.
+- No tests, checker, compiler, PlatformIO build, flash or hardware operation was run.
+
 ## 2026-11-13 — ATT-DASHBOARD-REFRESH-01 — preserve page state during polling (source only)
 
 - Split the dashboard's status-only repaint from full page navigation rendering. The 15-second poll and manual refresh now update status nodes in place instead of replacing the active page, closing the mobile sidebar, or resetting scroll/focus state.

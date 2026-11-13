@@ -6,7 +6,7 @@ E26/C18 inclusive term-end source changes and regression registrations were adde
 
 ## Current source inventory — static recount, 2026-11-13
 
-A direct recount of current C++ test sources found **884 RUN_TEST registrations across 47 suites** after ATT-CLOCK-HEALTH-REVERIFY-OWNER-01. This is an inventory count, not a pass count. The prior 972/970 figures in working-memory snapshots do not match the current source tree and are superseded. Current relevant suite counts: test_coreb 45, test_clock_confirmation 23, test_config_guard 7, test_as608_pipeline 16, test_monthset 24. One new health-latch regression was added; affected assertions are NOT RUN. No tests, checker, compiler, build, PlatformIO, flash or hardware action was run.
+A direct recount of current C++ test sources found **894 RUN_TEST registrations across 47 suites** on 2026-11-13. This is an inventory count, not a pass count. Relevant current suite counts include: test_coreb 49, test_clock_confirmation 23, test_config 15, test_config_guard 7, test_as608_pipeline 17, test_first_run_setup_request 24, test_nvs_config 48, test_nvs_startup_guard_policy 10, test_coreb2 17 and test_monthset 24. Older 972/970 and 884 figures in working-memory snapshots are stale for this checkout; the direct recount supersedes them. The current E26 boundary, clock-latch, first-run request/body and NVS guard registrations remain NOT RUN unless individually covered by explicitly recorded historical runs. No tests, checker, compiler, build, PlatformIO, flash or hardware action was run for this recount.
 
 ## v0.2.95 — MonthSet/LogStore reconciliation after visible empty-file creation
 
