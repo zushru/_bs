@@ -12,7 +12,7 @@ struct Esp32NvsStartupStatus {
   bool initObserved;
   uint32_t initCallCount;
   int32_t firstInitResult;
-  bool wholePartitionEraseBlocked;
+  bool nvsEraseBlocked;
   bool safeForApplication;
 };
 

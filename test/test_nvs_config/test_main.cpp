@@ -313,7 +313,7 @@ void test_begin_rejects_no_free_pages_without_opening_storage() {
   Esp32NvsConfigBackend backend;
   initialized = false;
   fakeStartupStatus.firstInitResult = ESP_ERR_NVS_NO_FREE_PAGES;
-  fakeStartupStatus.wholePartitionEraseBlocked = true;
+  fakeStartupStatus.nvsEraseBlocked = true;
   fakeStartupStatus.safeForApplication = false;
   TEST_ASSERT_FALSE(backend.begin());
   TEST_ASSERT_FALSE(backend.ready());
@@ -326,7 +326,7 @@ void test_begin_rejects_new_nvs_version_without_destructive_recovery() {
   Esp32NvsConfigBackend backend;
   initialized = false;
   fakeStartupStatus.firstInitResult = ESP_ERR_NVS_NEW_VERSION_FOUND;
-  fakeStartupStatus.wholePartitionEraseBlocked = true;
+  fakeStartupStatus.nvsEraseBlocked = true;
   fakeStartupStatus.safeForApplication = false;
   TEST_ASSERT_FALSE(backend.begin());
   TEST_ASSERT_FALSE(backend.ready());

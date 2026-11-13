@@ -173,7 +173,7 @@ void setup() {
         nvsStatus.initObserved ? 1U : 0U,
         static_cast<unsigned long>(nvsStatus.initCallCount),
         static_cast<long>(nvsStatus.firstInitResult),
-        nvsStatus.wholePartitionEraseBlocked ? 1U : 0U);
+        nvsStatus.nvsEraseBlocked ? 1U : 0U);
     return;
   }
   Serial.printf("SAFE_NVS_INIT=PASS init_calls=%lu erase_guard=ARMED\n",

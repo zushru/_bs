@@ -4,7 +4,7 @@
 **Original baseline at approval:** v0.2.71; current verified source baseline is v0.2.95 (2026-11-12)  
 **Completed:** C13.1 — host-only append fault-injection coverage (v0.2.72).  
 **C13.2 status:** D1–D11 engineering choices were delegated to assistant judgment on 2026-11-10 and are recorded in the proposal as DELEGATED, not user-signed product rules. v0.2.77 implements only read-only startup preservation; no destructive recovery transaction or journal is authorized.
-**C34 status:** v0.2.74 audited the pinned erase surface; v0.2.75 gates Esp32NvsConfigBackend on the pre-setup guard snapshot; v0.2.76 makes low-level AP/PIN NVS adapters independently reject an unsafe snapshot. The shared erase wrapper remains narrow, `ConfigBootCoordinator` ordering is not enforced by the adapters, and production root integration is still blocking.  
+**C34 status:** v0.2.74 audited the pinned erase surface; v0.2.75 gates Esp32NvsConfigBackend; v0.2.76 gates low-level AP/PIN NVS adapters; 2026-11-13 source hardening blocks all DATA_NVS partition-wrapper erase ranges after a failed first init. Raw `esp_flash` erase APIs, DATA_NVS_KEYS, deliberate chunking after successful init, and production owner ordering remain uncovered. C34 and production root integration remain blocking.
 **Status:** Approved sequence; each increment still requires its own source-level review and verification. This roadmap does not authorize changing signed or delegated product decisions.
 
 

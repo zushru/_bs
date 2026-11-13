@@ -14,7 +14,7 @@ namespace {
 // cannot silently make the startup snapshot look valid.
 uint32_t gNvsInitCallCount = 0;
 esp_err_t gFirstNvsInitResult = ESP_FAIL;
-bool gWholePartitionEraseBlocked = false;
+bool gNvsEraseBlocked = false;
 
 }  // namespace
 
@@ -25,17 +25,18 @@ Esp32NvsStartupStatus Esp32NvsStartupGuard::status() {
   result.initCallCount = gNvsInitCallCount;
   result.initObserved = result.initCallCount != 0;
   result.firstInitResult = static_cast<int32_t>(gFirstNvsInitResult);
-  result.wholePartitionEraseBlocked = gWholePartitionEraseBlocked;
+  result.nvsEraseBlocked = gNvsEraseBlocked;
   result.safeForApplication = mayUseNvsAfterStartup(
       result.initCallCount, result.firstInitResult == ESP_OK,
-      result.wholePartitionEraseBlocked);
+      result.nvsEraseBlocked);
   return result;
 }
 
 }  // namespace att
 
 // GNU ld --wrap preserves the framework's ordinary init path while exposing
-// the first result and denying only a full DATA_NVS erase_range request.
+// the first result. A failed first init arms a fail-closed DATA_NVS partition-
+// erase policy for all subsequent erase_range requests.
 extern "C" esp_err_t __real_nvs_flash_init(void);
 extern "C" esp_err_t __wrap_nvs_flash_init(void) {
   const esp_err_t result = __real_nvs_flash_init();
@@ -52,9 +53,11 @@ extern "C" esp_err_t __wrap_esp_partition_erase_range(
       partition->type == ESP_PARTITION_TYPE_DATA &&
       partition->subtype == ESP_PARTITION_SUBTYPE_DATA_NVS;
   const size_t partitionSize = partition == nullptr ? 0 : partition->size;
-  if (att::shouldBlockWholeNvsPartitionErase(isNvsDataPartition, offset, size,
-                                              partitionSize)) {
-    gWholePartitionEraseBlocked = true;
+  const bool firstInitFailed = gNvsInitCallCount != 0 &&
+      gFirstNvsInitResult != ESP_OK;
+  if (att::shouldBlockNvsPartitionErase(isNvsDataPartition, firstInitFailed,
+                                        offset, size, partitionSize)) {
+    gNvsEraseBlocked = true;
     return ESP_ERR_NOT_ALLOWED;
   }
   return __real_esp_partition_erase_range(partition, offset, size);
