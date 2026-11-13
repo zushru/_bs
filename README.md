@@ -15,7 +15,8 @@
 - target/esp32_hardware_probe/: diagnostic-only I2C/OLED/SoftAP probe. Not attendance firmware.
 - sketch/: legacy diagnostic bring-up sketch.
 - test/: 39 native suites, 738 C++ test registrations in this snapshot.
-- web/sf2/: separate browser-side SF2 reference model; not integrated with the device API/dashboard/XLSX.
+- web/dashboard/: canonical self-contained local dashboard source; the current target embeds it and serves a read-only status view from GET /api/status. Attendance, roster, timetable, administration and reports remain unavailable until their real owners and APIs are integrated.
+- web/sf2/: separate browser-side SF2 reference models and tests; not an authoritative device API or production XLSX exporter.
 - docs/: source-of-truth decisions, critical issues, unverified items, test evidence, module specifications, audits (including AUDIT_v0.2.74.md through AUDIT_v0.2.95.md), approved roadmap (DEVELOPMENT_ROADMAP.md) and read-first working memory (WORKING_MEMORY.md).
 
 ## Verification

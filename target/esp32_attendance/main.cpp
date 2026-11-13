@@ -7,6 +7,8 @@
 #include <Wire.h>
 #include <string.h>
 
+#include "dashboard_html.h"
+
 #include "ap_credential_bootstrap.h"
 #include "ap_credential_setup.h"
 #include "setup_code_sequence.h"
@@ -55,43 +57,6 @@ enum RtcStartupObservation : uint8_t {
   RTC_STARTUP_BELOW_LOG,
   RTC_STARTUP_CANDIDATE_UNTRUSTED
 };
-
-const char kNeedsSetupHtml[] PROGMEM =
-    "<!doctype html><html lang='en'><meta charset='utf-8'>"
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<meta name='robots' content='noindex,nofollow'>"
-    "<title>ATT setup</title><style>"
-    "body{font:16px system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17212b}"
-    "main{max-width:560px;margin:10vh auto;padding:24px;background:#fff;border-radius:14px}"
-    "h1{margin-top:0} .state{font-weight:700;color:#875400}"
-    "p{line-height:1.5} small{color:#596673}</style><main>"
-    "<h1>ATT</h1><p class='state'>Initial setup required</p>"
-    "<p>The device has started its protected setup network. Use the Wi-Fi "
-    "credential shown on the device OLED.</p>"
-    "<p>Configuration changes are not enabled in this build. No attendance "
-    "is being recorded.</p><p><small>Read-only system status.</small></p>"
-    "<p><a href='/api/status'>Device status</a></p></main></html>";
-
-const char kConfiguredHtml[] PROGMEM =
-    "<!doctype html><html lang='en'><meta charset='utf-8'>"
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<meta name='robots' content='noindex,nofollow'>"
-    "<title>ATT status</title><style>"
-    "body{font:16px system-ui,sans-serif;margin:0;background:#f3f5f7;color:#17212b}"
-    "main{max-width:560px;margin:10vh auto;padding:24px;background:#fff;border-radius:14px}"
-    "h1{margin-top:0} .state{font-weight:700;color:#17623b}"
-    "p{line-height:1.5} small{color:#596673}</style><main>"
-    "<h1>ATT</h1><p class='state'>Configuration loaded</p>"
-    "<p>The stored configuration passed boot validation. Event groups were "
-    "structurally checked, roster history was replayed and the log-backed "
-    "attendance-admission observer was attached. Attendance remains disabled.</p>"
-    "<p>The DS3231 candidate is UTC. Storage durability has not been certified. "
-    "The RTC observation is "
-    "diagnostic only and does not establish trusted time. Administrator "
-    "authentication, attendance scanning, changes and SF2 export remain "
-    "disabled in this boot-shell build.</p>"
-    "<p><small>Read-only system status.</small></p>"
-    "<p><a href='/api/status'>Device status</a></p></main></html>";
 
 const char kNeedsSetupJson[] PROGMEM =
     "{\"boot\":\"needs_setup\",\"ap\":\"ready\","
@@ -341,19 +306,14 @@ void addReadOnlyHeaders(WebServer& server) {
   server.sendHeader("Referrer-Policy", "no-referrer");
   server.sendHeader(
       "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
-      "form-action 'none'; frame-ancestors 'none'");
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+      "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
 }
 
 void registerReadOnlyRoutes(Application& app) {
   app.http.on("/", HTTP_GET, [&app]() {
     addReadOnlyHeaders(app.http);
-
-    if (app.bootState == att::CFG_BOOT_NEEDS_SETUP) {
-      app.http.send_P(200, "text/html; charset=utf-8", kNeedsSetupHtml);
-    } else {
-      app.http.send_P(200, "text/html; charset=utf-8", kConfiguredHtml);
-    }
+    app.http.send_P(200, "text/html; charset=utf-8", kDashboardHtml);
   });
 
   app.http.on("/api/status", HTTP_GET, [&app]() {

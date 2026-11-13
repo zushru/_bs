@@ -9,7 +9,7 @@
 
 ## 1. What this repository contains
 
-ATT has reusable firmware components, native C++ tests and a separate browser-side SF2 reporting reference model. A first production-oriented **read-only boot shell** now exists under `target/esp32_attendance`, but it does **not** contain the integrated attendance runtime, authenticated administration/API, complete dashboard, or production XLSX exporter. Components that compile and test independently are not thereby production-integrated.
+ATT has reusable firmware components, native C++ tests, a canonical read-only local dashboard, and a separate browser-side SF2 reporting reference model. The production-oriented **read-only boot shell** under `target/esp32_attendance` serves the dashboard from `web/dashboard/index.html` and polls only its public `GET /api/status` endpoint. Status polling updates visible nodes in place and does not rebuild navigation/page content. The generated header is refreshed from the canonical HTML source. This UI work remains source-only and unverified in a browser/device. It still does **not** contain the integrated attendance runtime, authenticated administration/API, attendance/roster/timetable routes, or production XLSX exporter. Dashboard navigation for those unavailable workflows is explanatory only; no browser mock data or simulated actions are used. Components that compile and test independently are not thereby production-integrated.
 
 - `lib/core/src/`: hardware-independent attendance/event, roster, configuration, time/clock, closure, health, authentication, log and restore logic.
 - `lib/as608/src/`: AS608 protocol-facing client, enrollment/attendance pipeline, sensor arbiter and config bridge.
@@ -17,7 +17,9 @@ ATT has reusable firmware components, native C++ tests and a separate browser-si
 - `lib/littlefs_file_set/src/`: file-set adapter, no-format mount owner and serialized access wrapper. Production owner/root adoption and target durability are not established.
 - `target/esp32_adapter_link/`: inert compile/link smoke application. **Never flash.**
 - `target/esp32_hardware_probe/`: diagnostic-only hardware probe. Not attendance firmware.
-- `target/esp32_attendance/`: production-oriented boot shell with signed partition table, read-only status HTTP endpoints, READY-only DS3231 UTC/calendar/OSF diagnostics, full read-only `MonthSet`/`LogStore::open()` replay and HealthFsm diagnostics; attendance and all privileged functions are disabled.
+- `target/esp32_attendance/`: production-oriented boot shell with signed partition table, read-only status HTTP endpoints, READY-only DS3231 UTC/calendar/OSF diagnostics, full read-only `MonthSet`/`LogStore::open()` replay and HealthFsm diagnostics; it embeds the canonical read-only dashboard; attendance and all privileged functions are disabled.
+- `web/dashboard/`: canonical standalone six-destination local dashboard source and integration contract; reads only the public status endpoint, with unsupported workflows explicitly unavailable.
+- `target/esp32_attendance/dashboard_html.h`: generated PROGMEM dashboard header; regenerate from the HTML source with `python3 tools/embed_dashboard.py`.
 - `test/`: 47 native C++ suites (894 source registrations; not a pass count).
 - `web/sf2/`: browser-side pure/reference models and Node tests, not a production API/dashboard/exporter.
 
@@ -34,7 +36,7 @@ No Git metadata is present in the supplied snapshot. Do not assume a branch, com
 | Native C++ registrations | 894 across 47 suites | Recounted directly from current test source files using RUN_TEST registrations; source inventory, not a pass count. Current focused counts: test_core 21, test_coreb 49, test_clock_confirmation 23, test_config 15, test_config_guard 7, test_as608_pipeline 17, test_nvs_config 48, test_nvs_startup_guard_policy 10, test_monthset 24. Older 972/970 working-memory figures did not match the present source tree and are superseded by this recount. The newly added clock-latch and E26 boundary regressions are NOT RUN. |
 | AS608 resolver-focused native | 18/18 pipeline + 40/40 enrollment | `LinearAs608PageResolver` is used in successful pipeline fixtures; native fakes only, U5 hardware semantics remain open. |
 | v0.2.95 focused native run | 100/100 passed | Recorded in `RELEASE_v0.2.95.md`: `test_monthset`, `test_littlefs_fileset`, `test_littlefs_mount_owner`, `test_littlefs_serialized_fileset`. It was not rerun during this packaging pass. |
-| Current source inventory after E26 additions | 893 across 47 suites | Registrations only, not pass evidence. The archived 193/193 Nov 12 E26 run belongs to a different source state; current changes are NOT RUN. |
+| Current source inventory after E26 additions | 894 across 47 suites | Registrations only, not pass evidence. The archived 193/193 Nov 12 E26 run belongs to a different source state; current changes are NOT RUN. |
 | SF2 Node registrations | 270 across 12 test files | Independently rerun during packaging: `npm test` passed 270/270 on Node v22.16.0. |
 | SF2 syntax checks | All `.mjs` source, fixtures and test modules | Independently passed with `node --check` on Node v22.16.0. |
 | C13 host fallback | 79/79 across four suites, rerun 2026-11-12 | Passed with g++ 14.2.0 normally and under ASan/UBSan. Includes `test_littlefs_vfs_probe`; uses the limited local Unity-compatibility shim and POSIX filesystem, not official PlatformIO Unity or target LittleFS. Logs in `docs/evidence/host_c13_vfs*`. |

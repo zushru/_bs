@@ -1,3 +1,18 @@
+## 2026-11-13 — ATT-DASHBOARD-REFRESH-01 — preserve page state during polling (source only)
+
+- Split the dashboard's status-only repaint from full page navigation rendering. The 15-second poll and manual refresh now update status nodes in place instead of replacing the active page, closing the mobile sidebar, or resetting scroll/focus state.
+- Extended `tools/check_dashboard.py` with source assertions that status polling uses the in-place updater and never calls `renderPage()`.
+- Regenerated the embedded PROGMEM header from the canonical HTML source. This is a source-only UI correction; no HTTP routes, firmware features, sample data or write actions were added.
+- No tests, dashboard checker, static firmware checker, compiler, PlatformIO build, flash or hardware operation was run.
+
+## 2026-11-13 — ATT-DASHBOARD-CANON-01 — canonical read-only dashboard integration (source only)
+
+- Added web/dashboard/index.html as the canonical, self-contained six-destination UI source, following the supplied reference's layout and navigation while removing its sample data, simulator and preview-only mutation handlers.
+- The current ESP32 target embeds a generated PROGMEM copy through tools/embed_dashboard.py; PlatformIO regenerates the header before compilation. GET / serves the canonical page. The browser polls only the existing public GET /api/status; no new API routes or write operations were added.
+- Attendance, roster/fingerprints, timetable and reports remain explicitly unavailable until real production owners, authorization, data contracts, persistence and recovery semantics exist. No mock records, fake exports, credential disclosures or inferred absences are shown.
+- Added tools/check_dashboard.py as an independent source/header parity, six-destination, status-only polling, no-demo/no-credential and read-only route/CSP contract check. Extended tools/check_att_boot_shell.py with the same dashboard integration assertions.
+- Source-only change. tools/check_dashboard.py, inline JavaScript syntax check (node --check) and git diff --check passed. tools/check_att_boot_shell.py exited nonzero on unrelated current-tree assertions involving pinned WebServer hashes, closure/index invariants, status allowlists, first-run setup regressions, partition guards and HealthFsm; its dashboard-specific assertions emitted no failures. Treat the overall checker as FAIL, not a pass. Native tests, compiler, PlatformIO build, ELF inspection, flash and hardware: NOT RUN. The dashboard is a canonical read-only UI integration, not closure of C3/C6/C13.3 or production release gates.
+
 ## 2026-11-13 — ATT-E26-INCLUSIVE-TERM-01 — align inclusive term-end source contract (source only)
 
 - Recorded E26 as DELEGATED: the final configured local calendar day is included; `0 <= termStart <= termEnd <= 31446`; one-day terms are valid.

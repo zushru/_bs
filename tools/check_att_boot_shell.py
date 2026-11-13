@@ -20,8 +20,9 @@ pio = PIO.read_text(encoding="utf-8")
 partition_text = PARTITIONS.read_text(encoding="utf-8")
 
 webserver_patch = (ROOT / "tools/apply_pinned_webserver_patch.py").read_text(encoding="utf-8")
-require("extra_scripts = pre:tools/apply_pinned_webserver_patch.py" in pio,
-        "attendance target must apply the pinned WebServer patch before build")
+require("pre:tools/embed_dashboard.py" in pio and
+        "pre:tools/apply_pinned_webserver_patch.py" in pio,
+        "attendance target must embed the canonical dashboard and apply the pinned WebServer patch before build")
 for token in (
     "4.30312.261024", "3.3.12",
     "c24f1e65b4ce3fb7ab868f6bca7aab7af5dcdfd1ca81ce9716752a922e52ce78",
@@ -44,9 +45,9 @@ require('sendErrorResponse(client, "405 Method Not Allowed")' in webserver_patch
 require("if (_currentHandler && _currentHandler->canRaw(*this, _currentUri)) {" in webserver_patch and
         "if (!isForm && _currentHandler && _currentHandler->canRaw(*this, _currentUri)) {" in webserver_patch,
         "the patch must replace the multipart-excluding raw condition with unconditional raw-handler dispatch")
-require("extra_scripts = pre:tools/apply_pinned_webserver_patch.py" in pio and
+require("pre:tools/embed_dashboard.py" in pio and
         "framework = arduino" in pio,
-        "pinned framework patch must be scoped to the attendance PlatformIO environment")
+        "dashboard generation and pinned framework patch must be scoped to the attendance PlatformIO environment")
 
 closure_header = (ROOT / "lib/core/src/closure_engine.h").read_text(encoding="utf-8")
 closure_source = (ROOT / "lib/core/src/closure_engine.cpp").read_text(encoding="utf-8")
@@ -89,15 +90,53 @@ for case in (
 require("ClosureEngine" not in source and "closure.step(" not in source,
         "bounded ClosureEngine primitive must remain uncomposed in the read-only boot shell")
 
-payload_start = source.find("const char kNeedsSetupHtml")
-payload_end = source.find("struct Application")
-require(payload_start >= 0 and payload_end > payload_start,
-        "static web payload block is missing")
-if payload_start >= 0 and payload_end > payload_start:
-    payload = source[payload_start:payload_end].lower()
+dashboard_path = ROOT / "web/dashboard/index.html"
+dashboard_header_path = ROOT / "target/esp32_attendance/dashboard_html.h"
+dashboard_script_path = ROOT / "tools/embed_dashboard.py"
+require(dashboard_path.exists() and dashboard_header_path.exists() and
+        dashboard_script_path.exists(),
+        "canonical dashboard source, embed generator and generated header must exist")
+if dashboard_path.exists() and dashboard_header_path.exists() and dashboard_script_path.exists():
+    dashboard = dashboard_path.read_text(encoding="utf-8")
+    dashboard_header = dashboard_header_path.read_text(encoding="utf-8")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("att_embed_dashboard", dashboard_script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    require(dashboard_header == module.render_header(dashboard),
+            "generated PROGMEM dashboard header must match canonical HTML source")
+    require('#include "dashboard_html.h"' in source and
+            "kDashboardHtml" in source and
+            "kNeedsSetupHtml" not in source and "kConfiguredHtml" not in source,
+            "the production root must serve the single canonical dashboard source")
+    for token in ('data-page="dashboard"', 'data-page="attendance"',
+                  'data-page="students"', 'data-page="timetable"',
+                  'data-page="reports"', 'data-page="device"'):
+        require(token in dashboard, f"canonical dashboard navigation missing {token}")
+    require('fetch("/api/status"' in dashboard and dashboard.count("fetch(") == 1,
+            "dashboard must read only the existing status endpoint")
+    for forbidden in ("sampleStudents", "DEMO_TODAY", "scenario-select",
+                      "localStorage", "sessionStorage", "XMLHttpRequest"):
+        require(forbidden not in dashboard,
+                f"canonical dashboard must not contain demo state or browser persistence: {forbidden}")
+    require("HTTP_POST" not in dashboard and "attendance.csv" not in dashboard and
+            "simulate-" not in dashboard,
+            "dashboard must not expose unsupported mutation or sample-export actions")
+    dashboard_lower = dashboard.lower()
     for secret_field in ("wifipass", "passphrase", "password", "ssid"):
-        require(secret_field not in payload,
-                f"web page/status payload must not expose {secret_field}")
+        require(secret_field not in dashboard_lower,
+                f"dashboard must not expose {secret_field}")
+    require("script-src 'unsafe-inline'" in source and "connect-src 'self'" in source,
+            "read-only CSP must allow only inline dashboard code and same-origin status polling")
+    require("sensor_fault" in dashboard and "unverified" in dashboard.lower(),
+            "dashboard must explain sensor/coverage uncertainty without manufacturing absence")
+    require("window.setInterval(refreshStatus,15000)" in dashboard,
+            "dashboard must refresh device status using a bounded, low-frequency poll")
+    require("AbortController" in dashboard and "5000" in dashboard and
+            "clearTimeout(timeout)" in dashboard,
+            "dashboard status polling must have a five-second abort timeout and release it")
+    require("cache:\"no-store\"" in dashboard and "response.ok" in dashboard,
+            "dashboard must disable fetch caching and reject non-success status responses")
 
 require(source.count('app.http.on("') == 2,
         "expected exactly two explicit HTTP routes")

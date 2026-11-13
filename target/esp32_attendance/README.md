@@ -1,12 +1,17 @@
 # ATT ESP32 attendance target — boot shell
 
-This target is the first production-oriented composition root. It is deliberately limited to a protected AP and read-only status page. It does not implement attendance or administration yet.
+This target is the first production-oriented composition root. It is deliberately limited to a protected AP and a canonical read-only local dashboard. It does not implement attendance or administration yet.
 
 ## Build
 
 ```sh
 pio run -c platformio.attendance.ini -e att-boot-shell -j 2
 ```
+
+## Canonical dashboard
+
+The single source is web/dashboard/index.html; UI/API boundaries are documented in web/dashboard/README.md. tools/embed_dashboard.py generates dashboard_html.h, and the attendance PlatformIO environment runs that generator before compilation. Edit the HTML source, not the generated header. The embedded page uses only the existing same-origin GET /api/status endpoint. It keeps the six reference navigation destinations, but pages without real production APIs are explicitly unavailable. There are no sample students, mock attendance records, simulated actions, credential fields or write requests.
+
 
 The target uses the signed 4 MB partition table in `partitions_att.csv`:
 
@@ -37,7 +42,7 @@ On `CFG_BOOT_READY`, the target mounts the signed `spiffs` partition without for
 - No attendance scanning, enrollment, corrections, closure or scheduler.
 - On `CFG_BOOT_READY`, a no-format LittleFS mount, read-only layout validation and complete log replay run before AP/HTTP startup; `NEEDS_SETUP` skips attendance storage. No attendance-file mutation, repair or recovery is enabled.
 - No reporting identity companion, XLSX/SF2 export or report route.
-- The status page explicitly states that attendance and privileged functions are disabled.
+- The dashboard explicitly states that attendance and privileged functions are disabled. Its read-only status fields reflect only the public status response; no attendance, roster, timetable, admin or report data is fabricated.
 
 Do not claim this is a usable attendance release. It is a boot/network composition milestone that preserves fail-closed behavior while the required authentication and application services are completed.
 

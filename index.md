@@ -202,6 +202,14 @@ durability or power-cut recovery. See C13/C13.3 in docs/CRITICAL.md.
 Never infer end-to-end attendance functionality from a target name, compile,
 link or diagnostic endpoint.
 
+### Canonical local dashboard
+
+- Source of truth: web/dashboard/index.html; integration contract: web/dashboard/README.md.
+- tools/embed_dashboard.py generates target/esp32_attendance/dashboard_html.h; the attendance PlatformIO pre-build hook regenerates it from the HTML source.
+- target/esp32_attendance/main.cpp serves this embedded page at GET /. The page reads only the existing public GET /api/status endpoint.
+- The six reference navigation destinations remain stable. Only device/status diagnostics are live in this boot shell; attendance, roster/fingerprints, timetable and reports explain their integration blockers and expose no simulated or mutation controls.
+- This is a read-only UI integration, not closure of C3, C6, C13.3 or the production dashboard/API gate. See web/dashboard/README.md.
+
 ## 7. Native C++ test map
 
 Current source inventory: 962 RUN_TEST registrations across 47 direct suites.
@@ -246,6 +254,8 @@ trusted data service or final XLSX exporter.
 - tools/host_test_support/unity.h — limited host Unity-compatibility shim.
 - tools/check_att_boot_shell.py — source/contract checker for boot-shell
   invariants; inspect its exact checks before interpreting its result.
+- tools/check_dashboard.py — focused static contract checker for canonical
+  dashboard/header parity, status-only requests and read-only route/CSP boundaries.
 - tools/inspect_probe_wrappers.sh and related tests — diagnostic probe wrapper
   inspection utilities.
 - tools/legacy/ — historical, version-specific verification scripts only.
