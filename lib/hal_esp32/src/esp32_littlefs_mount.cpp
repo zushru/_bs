@@ -44,7 +44,10 @@ bool Esp32LittleFsMountBackend::mountWithoutFormatting(
   config.partition_label = partitionLabel;
   config.partition = nullptr;
   config.format_if_mount_failed = false;
-  config.read_only = false;
+  // This firmware entry point is a read-only boot shell. Enforce that at
+  // the VFS boundary as well as at the call sites; a future writable
+  // production owner must use a separately reviewed mount configuration.
+  config.read_only = true;
   config.dont_mount = false;
   config.grow_on_mount = false;
 

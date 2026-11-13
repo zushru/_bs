@@ -15,7 +15,7 @@ The target uses the signed 4 MB partition table in `partitions_att.csv`:
 - Factory application: `0x10000`, `0x180000`
 - SPIFFS/LittleFS data partition: `0x190000`, `0x270000`
 
-On `CFG_BOOT_READY`, the target mounts the signed `spiffs` partition without formatting, validates the existing layout read-only, and replays the complete `MonthSet`/`LogStore` stream. `CFG_BOOT_NEEDS_SETUP` skips attendance storage. Neither path writes, truncates, repairs, quarantines or formats attendance files. This source-level mount/replay does not establish target VFS durability or physical power-loss safety.
+On `CFG_BOOT_READY`, the target mounts the signed `spiffs` partition without formatting or grow-on-mount, requests `read_only=true` at the LittleFS VFS boundary, validates the existing layout read-only, and replays the complete `MonthSet`/`LogStore` stream. `CFG_BOOT_NEEDS_SETUP` skips attendance storage. Neither path writes, truncates, repairs, quarantines or formats attendance files. The VFS flag is boot-shell-only defense in depth; its enforcement on the exact pinned target has not been runtime-verified, and it is not the writable mount design for future attendance operation. This source-level mount/replay does not establish target VFS durability or physical power-loss safety.
 
 ## Boot behavior
 

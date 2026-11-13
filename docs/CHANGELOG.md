@@ -1,3 +1,10 @@
+## 2026-11-13 — ATT-READONLY-VFS-MOUNT-01 — enforce boot-shell LittleFS read-only mode (source only)
+
+- Changed the ESP32 LittleFS mount configuration from `read_only=false` to `read_only=true`. Formatting and grow-on-mount remain disabled. The boot shell now requests VFS-level write protection in addition to its source-level read-only replay path.
+- The existing `tools/check_att_boot_shell.py` already required `config.read_only = true`; this increment resolves the implementation/guard mismatch without changing its assertion. Espressif documents the flag and its incompatibility with format-on-failure and grow-on-mount; exact target runtime rejection is still unverified.
+- Updated the target README, recovery spec, blocker summary, roadmap and working memory. This does not prove VFS durability or authorize the future writer. C13.3 and the partition mismatch remain blocking.
+- No tests, checker, compiler, build, PlatformIO, flash or hardware operation was run.
+
 ## v0.2.96 (2026-11-12) — deadline-first workflow and status alignment (documentation only)
 
 - Added root `DEVELOPMENT_WORKFLOW.md` as the canonical operational protocol for baseline guards, blocker classes, coherent batches, two-pass execution, verification cadence and batch reporting.

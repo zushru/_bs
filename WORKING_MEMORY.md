@@ -331,3 +331,12 @@ operation was run.
 Next task remains authoritative partition-layout reconciliation; the complete
 read-only 0x1000-byte device partition-table extraction and flash identity
 evidence are still unavailable. Do not alter signed geometry or enable writes.
+
+
+## 18. ATT-READONLY-VFS-MOUNT-01 — 2026-11-13
+
+Static source/contract audit found a mismatch in the ESP32 LittleFS mount: `tools/check_att_boot_shell.py` already required `config.read_only = true`, but `Esp32LittleFsMountBackend::mountWithoutFormatting()` set it false. The backend now requests `read_only=true`; `format_if_mount_failed` and `grow_on_mount` remain false. The target README, recovery spec, blocker summary and roadmap now distinguish this boot-shell-only access restriction from a future writable production storage owner.
+
+This narrows accidental POSIX/VFS write exposure if the exact pinned component enforces the documented field. The exact target component runtime and write rejection have NOT been verified in this session. C13.3 remains blocking for mounted-target errors, durability, metadata persistence, low-space, restart/interruption and physical power-cut/brownout evidence. The partition mismatch remains unresolved.
+
+No tests, checker, compiler, build, PlatformIO, flash or hardware operation was run. The existing static checker assertion was inspected but not executed. MANIFEST.sha256 already had 13 unrelated/stale mismatches before this increment; it was not regenerated.

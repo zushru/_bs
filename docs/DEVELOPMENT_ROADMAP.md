@@ -17,6 +17,13 @@
 - Use `../DEVELOPMENT_WORKFLOW.md` for the two-pass deadline workflow, session baseline guard, focused test cadence, freeze trigger and batch report. Do not run full native N1 before the approved integration gate.
 - This overlay updates execution status only. It does not change product decisions, recovery policy, API exposure, persisted formats, sensor mapping, term boundaries or any decision status.
 
+## Current execution overlay — 2026-11-13
+
+- C13.3 source-only hardening: the `att-boot-shell` READY path already composes `Esp32LittleFsMountBackend` → `LittleFsStorageOwner` → serialized file set → `MonthSet`/`LogStore` read-only replay. The backend now requests `config.read_only = true`; `format_if_mount_failed` and `grow_on_mount` remain false. The existing `tools/check_att_boot_shell.py` assertion already required this setting, so the implementation now matches its guard.
+- This is only a boot-shell access restriction. It does not establish exact pinned VFS enforcement, durable file/directory commits, low-space behavior, descriptor recovery, restart safety, or power-cut resilience. It does not provide the writable storage owner needed by production attendance. C13.3 remains BLOCKING.
+- Partition reconciliation remains unresolved: the full read-only 0x1000-byte device partition-table capture and flash identity evidence are absent. Do not change signed geometry or flash the target.
+- All tests, checkers, compilers, PlatformIO builds, flash operations and hardware tests remain NOT RUN for this increment.
+
 ## Governing constraints
 
 1. Read `docs/WORKING_MEMORY.md` first, then `HANDOFF_FINAL.md`, `docs/DECISIONS.md`, the relevant specification, owning implementation and tests.

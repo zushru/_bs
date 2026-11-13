@@ -79,6 +79,12 @@ The existing test_partial_repair_is_repeatable does not exercise a crash during 
 - A recovery path must not treat CRC-valid records alone as proof that the attendance stream is semantically safe.
 - Backup CRCs and event CRCs are error-detection mechanisms, not cryptographic authenticity guarantees for quarantined data.
 
+### 2.6 Boot-shell mount access mode (2026-11-13 source review)
+
+- The current `att-boot-shell` ESP32 mount backend sets `read_only=true`, while keeping `format_if_mount_failed=false` and `grow_on_mount=false`. This is a defense-in-depth restriction for the read-only boot shell, not a production attendance-write configuration.
+- Espressif documents `read_only` as a supported field of `esp_vfs_littlefs_conf_t` and states it cannot be combined with format-on-failure or grow-on-mount. The current source keeps both incompatible options disabled. This external API documentation does not replace checking the exact pinned target component or running a mounted-target write-rejection check.
+- No target runtime evidence is claimed. C13.3 remains open for exact pinned VFS behavior, descriptor/error semantics, durability, interruption/restart and physical power-cut/brownout validation. Do not disable the read-only mount or enable writes as a shortcut.
+
 ## 3. Recovery invariants required before implementation
 
 The protocol must prove all of the following. A single unproven invariant blocks enabling destructive operations.

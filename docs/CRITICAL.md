@@ -13,6 +13,8 @@ This current-status block takes precedence over older dated audit entries in thi
 
 Clock/health follow-through update (2026-11-13): a reusable `ClockHealthOwner` now binds the authenticated dispatcher to the exact HealthFsm and ConfigBootCoordinator objects, accepts only request-authorized CCF_OK results, and releases only HB_CLOCK. It is not constructed by the production target and no route calls it; C3 and C6 remain open. The canonical HealthInputs clockTrusted field and provisioned-only clock-trust rule are restored; all current aggregate initializers supply the tenth field. Missing physical evidence remains a release blocker, not a waived test.
 
+C13.3 mount-mode update (2026-11-13, source only): the READY boot-shell LittleFS backend now requests `read_only=true` at the VFS boundary, with format-on-failure and grow-on-mount disabled. The existing boot-shell checker already asserted this contract; source and guard now agree. Exact pinned-target enforcement and durability remain unverified, so C13.3 is still blocking. The target remains a read-only boot shell, not an attendance release.
+
 The current development order and two-pass workflow are in `../DEVELOPMENT_WORKFLOW.md` and `DEVELOPMENT_ROADMAP.md`. Missing physical evidence remains a release blocker, not a waived test.
 
 ---
