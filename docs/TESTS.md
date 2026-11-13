@@ -1,3 +1,9 @@
+# Test and verification history
+
+## Current source status — 2026-11-13
+
+E26/C18 inclusive term-end source changes and regression registrations were added to the current checkout on 2026-11-13. They have NOT been run. The archived 2026-11-12 193/193 evidence belongs to a different source state and must not be used to claim these current changes pass. See `docs/CHANGELOG.md` and `WORKING_MEMORY.md` for exact scope.
+
 ## Current source inventory — static recount, 2026-11-13
 
 A direct recount of current C++ test sources found **884 RUN_TEST registrations across 47 suites** after ATT-CLOCK-HEALTH-REVERIFY-OWNER-01. This is an inventory count, not a pass count. The prior 972/970 figures in working-memory snapshots do not match the current source tree and are superseded. Current relevant suite counts: test_coreb 45, test_clock_confirmation 23, test_config_guard 7, test_as608_pipeline 16, test_monthset 24. One new health-latch regression was added; affected assertions are NOT RUN. No tests, checker, compiler, build, PlatformIO, flash or hardware action was run.

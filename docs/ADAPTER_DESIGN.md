@@ -68,7 +68,7 @@ The core API enum is authoritative for operations; exact URI spellings, JSON fie
 | `EP_PIN_RESET`, `EP_SETUP` | Setup code + health rules | Persist failed-attempt count before verification; enforce lockout and one-time/setup state. |
 | `EP_DAY`, `EP_ROSTER_GET`, `EP_CONFIG_GET`, `EP_EXPORT` | Token | Filter secrets and enforce health permissions. |
 | `EP_ROSTER_SET`, `EP_MARK`, `EP_NOCLASS`, `EP_CLOCK` | Token | Validate through pure core logic; append one durable event group; report success only after verified append. |
-| `EP_CONFIG_PUT` | Token + expected generation | Validate allowlisted fields; derive current `windowOpen` with `deriveConfigWindowOpen()` from trusted RTC; `unclosedPast` is unavailable until C17/E2 is resolved. Reject schedule-changing requests until C17/E2 and C18 are resolved; then use `ConfigApplyCoordinator`. |
+| `EP_CONFIG_PUT` | Token + expected generation | Validate allowlisted fields; derive current `windowOpen` with `deriveConfigWindowOpen()` from trusted RTC; `unclosedPast` is unavailable until C17/E2 is resolved. Reject schedule-changing requests until C17/E2 and the E26 source changes are verified; `apiDayInInclusiveTerm()` must be applied by any day-view/read route. Then use `ConfigApplyCoordinator`. |
 | `EP_ENROLL` | Token + health/enrollment gate | Idempotency `req_id`; enforce O11 batch verification toggle; reserve shared AS608 runtime; keep disabled until U5/E18 are resolved. |
 | `EP_BACKUP_ACK` | Token | Match outer backup CRC/length only after writer `finished()`. |
 | `EP_RESTORE`, `EP_ROLLOVER` | Token + setup code and typed confirmation where required | C2 restore orchestrator and atomic swap are not implemented; refuse until complete. |
@@ -102,7 +102,7 @@ This composition order is a design target, not a firmware implementation. Produc
 
 ## 6. Config boot and schedule gate (v0.2.16)
 
-`updateHealthFromConfigBoot()` maps config boot state to `HealthFsm`; `deriveConfigWindowOpen()` computes the current scan-window fact from validated config and trusted RTC time. It uses the timetable's window rules without applying term bounds, so it may conservatively report a window outside the configured term. There is intentionally no `unclosedPast` adapter yet. C17 records that the current timetable cannot safely reconstruct historical sessions after a schedule change because its effective-from boundary is not persisted. C18 records that term-end semantics differ across API/scan/closure layers. Reject schedule changes until E2/C17 and C18 are resolved.
+`updateHealthFromConfigBoot()` maps config boot state to `HealthFsm`; `deriveConfigWindowOpen()` computes the current scan-window fact from validated config and trusted RTC time. It uses the timetable's window rules without applying term bounds, so it may conservatively report a window outside the configured term. There is intentionally no `unclosedPast` adapter yet. C17 records that the current timetable cannot safely reconstruct historical sessions after a schedule change because its effective-from boundary is not persisted. E26 now selects an inclusive term end and source aligns API mutation, scan and closure boundaries; the current regressions are NOT RUN and no production day-view route exists. C17/E2 still blocks historical `unclosedPast`. Reject schedule changes until E2/C17 and E26 verification are resolved.
 
 ### OLED shared-bus adapter (v0.2.44)
 

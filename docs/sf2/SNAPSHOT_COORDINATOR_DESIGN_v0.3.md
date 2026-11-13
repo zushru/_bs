@@ -34,7 +34,7 @@ Do not use wall-clock time as a source revision. RTC may move backwards; source 
 3. One long-lived `EventGroupAudit`, attached after that open, returns `readyFor(log, exactOpenInfo)`. Unsupported event types continue to block until a type-specific validator exists. Do not attach one audit per request or exhaust the 16 observer slots.
 4. `RosterStore::historyComplete()` is true, and a separate roster-transition semantic audit has passed. `historyComplete()` alone is only parser/overflow health; it does not prove chronological transition correctness.
 5. Historical name projection has reached its explicit end state without error. The existing `RosterNameHistoryReader` currently aborts if the log count changes; a pinned-prefix reader is needed if export is paginated while attendance can append.
-6. The config copy and `configGeneration` are captured together. C17/E2 and C18/E26 remain unresolved, so historical calendar/closure claims affected by these issues must be marked incomplete and cannot support `ABSENT_CONFIRMED`.
+6. The config copy and `configGeneration` are captured together. C17/E2 remains unresolved, and the E26 source change still lacks current test evidence and a production day-view route. Historical calendar/closure claims affected by either issue must be marked incomplete and cannot support `ABSENT_CONFIRMED`.
 7. Reporting metadata store and school/section profiles are readable at one pinned metadata revision. Every month-overlap learner's reporting identity is resolved by student ID and valid-time date; missing fields block only the relevant final report, not normal attendance.
 8. The `MonthSet`/underlying file driver is not directly modified outside `LogStore` during the snapshot. The app loop owns all writes. A raw driver write bypasses current in-memory revisions and invalidates the guarantee.
 
@@ -103,7 +103,7 @@ The single GET route proposed earlier should be treated as a conceptual data req
 | Config/log/storage not healthy | Return a fault or incomplete state; do not return confirmed absences |
 | Event audit false/stale open generation | Refuse snapshot creation |
 | Roster interval overflow or semantic transition error | Refuse a finalizable roster snapshot |
-| C17/E2 or C18/E26 unresolved | `scheduleHistoryComplete=false`; block absence finalization for affected scope |
+| C17/E2 unresolved or E26 verification/read-route guard incomplete | `scheduleHistoryComplete=false`; block absence finalization for affected scope |
 | Metadata record missing | Return explicit incomplete warning; no invented school/LRN/sex/name fields |
 | Source invalidated during page reads | Return 409; discard the whole snapshot |
 | Client asks for another section | Reject; configured section only |
@@ -113,7 +113,7 @@ The single GET route proposed earlier should be treated as a conceptual data req
 1. Decide and implement metadata persistence after C13, PII encryption and backup/restore design are addressed.
 2. Add a roster-transition semantic audit (C24/U61).
 3. Add a pinned-log-prefix projection API; do not weaken the current reader's changed-snapshot protection.
-4. Define calendar completeness after C17/E2 and C18/E26.
+4. Define calendar completeness after C17/E2 history is persisted and the E26 term guard is verified and consumed by the day-view route.
 5. Add a source revision registry and ticket coordinator in the serialized application loop.
 6. Add bounded page serializers and only then an authenticated HTTP adapter; measure main-loop latency under AP + sensor activity on hardware.
 7. Add client page assembly, full snapshot validation and browser preview.

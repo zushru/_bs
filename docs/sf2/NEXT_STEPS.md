@@ -45,7 +45,7 @@ Completed in v0.2.18-v0.2.23:
 - **C25:** `EventGroupAudit` and exact-prefix replay exist as source helpers but are not installed in a production composition root. The group audit rejects event types without a validator and is not a complete domain/cryptographic verifier.
 - **C26/C27/C29:** No durable PII metadata store, at-rest/in-transit privacy design or backup/restore integration exists. Do not persist or expose LRN yet.
 - **C28:** Snapshot paging is only a pure model. No device-side lock/ticket/page reader, HTTP auth, target response measurement or loop-latency test exists.
-- **C17/E2 and C18/E26:** Historical timetable versions and consistent term-end semantics are unresolved; do not claim reliable historical absence/coverage when the historical schedule cannot be reconstructed.
+- **C17/E2:** Historical timetable versions are not persisted, so current-timetable replay cannot prove historical coverage. E26 now selects an inclusive term end and aligns source boundaries, but current regressions are NOT RUN and no production day-view route uses the shared guard. Do not claim reliable historical absence/coverage until both conditions are closed.
 - **C19/C20/C23:** The custom AM/PM convention and template version/print layout still need school confirmation; the user-selected no-Tardy SF2 rule is fixed locally, while the one-session non-class-day case remains open.
 
 ## Next safe increments

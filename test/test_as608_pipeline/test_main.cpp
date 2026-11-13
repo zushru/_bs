@@ -146,9 +146,9 @@ ConfigGateIn configGate(uint32_t generation = 7) {
   return gate;
 }
 
-Config validConfig() {
+Config validConfig(int32_t termEnd = 10) {
   Config config = defaultConfig();
-  config.termStart = 0; config.termEnd = 10;
+  config.termStart = 0; config.termEnd = termEnd;
   config.pinSet = 1; config.pinHash[0] = 1;
   strcpy(config.wifiPass, "test-passphrase");
   return config;
@@ -236,7 +236,7 @@ struct GateFixture {
     admission = new LogAttendanceAdmission(*log, config.params);
     if (!admission || !admission->attached()) return;
     closure = new ClosureEngine(*log, config.params, config.tt, *roster,
-                                MAX_ID, config.termStart);
+                                MAX_ID, config.termStart, config.termEnd);
     if (!closure || !closure->ready()) return;
     setHealth(false, true, true);
     gate = new ApplicationAttendanceGate(boot, *storage, *months, *log,
@@ -324,7 +324,8 @@ struct Fixture {
   As608StartupCoordinator startup;
   FixedPageResolver pages;
   As608AttendancePipeline pipeline;
-  Fixture() : storage(), log(storage), roster(480), config(validConfig()),
+  explicit Fixture(int32_t termEnd = 10)
+      : storage(), log(storage), roster(480), config(validConfig(termEnd)),
       admission(log, config.params), stream(), occupancy(),
       sensorRuntime(stream, roster, occupancy, 0), startup(sensorRuntime), pages(7, 4),
       pipeline(sensorRuntime, log, roster, config, pages, admission) {
@@ -363,6 +364,21 @@ void test_match_is_resolved_checked_and_committed_once() {
   TEST_ASSERT_TRUE(f.admission.alreadyScanned(TEST_DAY, 0, 4));
 }
 
+
+void test_configured_term_end_day_is_inclusive_for_scans() {
+  Fixture f(TEST_DAY);
+  TEST_ASSERT_TRUE(f.ready());
+  TEST_ASSERT_TRUE(f.pipeline.begin(TEST_EPOCH));
+  TEST_ASSERT_EQUAL_INT(ATT_PIPE_SAVED_PRESENT,
+      finishMatch(f.pipeline, f.stream, 7, 321));
+  Event saved;
+  TEST_ASSERT_TRUE(f.log.at(5, saved));
+  TEST_ASSERT_EQUAL_UINT8(EV_SCAN, saved.type);
+  TEST_ASSERT_EQUAL_UINT16(TEST_DAY, saved.b);
+  const size_t afterFinalDayScan = f.log.count();
+  TEST_ASSERT_FALSE(f.pipeline.begin(TEST_EPOCH + 86400u));
+  TEST_ASSERT_EQUAL_UINT32(afterFinalDayScan, f.log.count());
+}
 
 void test_late_match_is_committed_as_late() {
   Fixture f; TEST_ASSERT_TRUE(f.ready());
@@ -811,6 +827,7 @@ int main() {
   RUN_TEST(test_application_gate_rechecks_clock_health_before_match_commit);
   RUN_TEST(test_application_gate_rejects_incomplete_boot_or_mismatched_owner_graph);
   RUN_TEST(test_match_is_resolved_checked_and_committed_once);
+  RUN_TEST(test_configured_term_end_day_is_inclusive_for_scans);
   RUN_TEST(test_late_match_is_committed_as_late);
   RUN_TEST(test_duplicate_scan_does_not_append_a_second_attendance_event);
   RUN_TEST(test_unresolved_page_mapping_fails_without_creating_a_scan);

@@ -28,9 +28,13 @@ Therefore, deriving `unclosedPast` by scanning historical dates against today's 
 
 A durable fix requires a decision on how to persist the schedule-effective boundary/history. The config slot layout choice E2 is DELEGATED; changing it without approval is prohibited. A single last-change timestamp is insufficient if multiple schedule revisions must remain reconstructible. Candidate designs include a bounded versioned schedule-history structure with effective-from days, or durable schedule-change events with explicit transaction/recovery semantics. The chosen design must define how history and the active config remain consistent across power loss. Do not implement either until the user approves the direction and its failure ordering.
 
-## Term-end boundary finding (C18)
+## Term-end boundary rule (C18 / E26)
 
-The current source has a second boundary inconsistency: `dayChecks()` accepts `day == termEnd`, the attendance pipeline rejects it, and `ClosureEngine` has no term-end input. The config specification does not define inclusive versus exclusive semantics. v0.2.16 does not guess. Decide that rule first, then align API, scan, closure and day-view behavior with boundary tests.
+On 2026-11-13, under the user's explicit delegation of engineering decisions, PISHDA selected **inclusive** `termEnd`: the configured final local calendar day belongs to the term. The source contract is `0 <= termStart <= termEnd <= 31446`; one-day terms are valid. The 31446 ceiling is stricter than the 16-bit day field: epoch timestamps are uint32 Unix seconds, so 2106-02-05 (day 31446) is the last full local day representable at every allowed UTC offset.
+
+The source now applies this boundary in API mark/no-class validation, AS608 scan admission and match commit, closure tick/session creation and outage clipping, config validation, first-run setup parsing, and `ClosureEngine` config matching/rebinding. `apiDayInInclusiveTerm()` is the shared predicate that every future day-view/read adapter must call before `buildDayView()`; there is no production day-view route today. Regression source was added, but no tests were run in this increment. C18 is therefore source-implemented, not verified or release-cleared. This decision is DELEGATED, not SIGNED.
+
+C17 remains independent and blocking: `ClosureEngine` still has no persisted timetable-effective history. Do not enable schedule-changing requests or claim historical closure correctness until E2/C17 are resolved.
 
 ## Serialized-call contract
 

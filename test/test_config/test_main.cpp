@@ -167,7 +167,12 @@ void test_validate_rejects_each_rule() {
   c = good(); c.params.lateMin = 179; TEST_ASSERT_TRUE(validateConfig(c));
   c = good(); c.tt.day[0][0].end = c.tt.day[0][0].start; TEST_ASSERT_FALSE(validateConfig(c));
   c = good(); c.termStart = -1; TEST_ASSERT_FALSE(validateConfig(c));
-  c = good(); c.termEnd = c.termStart; TEST_ASSERT_FALSE(validateConfig(c));
+  c = good(); c.termEnd = c.termStart; TEST_ASSERT_TRUE(validateConfig(c));  // one-day inclusive term
+  c = good(); c.termEnd = c.termStart - 1; TEST_ASSERT_FALSE(validateConfig(c));
+  c = good(); c.termEnd = MAX_TERM_DAY; TEST_ASSERT_TRUE(validateConfig(c));
+  c = good(); c.termStart = MAX_TERM_DAY; c.termEnd = MAX_TERM_DAY; TEST_ASSERT_TRUE(validateConfig(c));
+  c = good(); c.termEnd = MAX_TERM_DAY + 1; TEST_ASSERT_FALSE(validateConfig(c));
+  c = good(); c.termStart = MAX_TERM_DAY + 1; TEST_ASSERT_FALSE(validateConfig(c));
   c = good(); c.soundMode = 3; TEST_ASSERT_FALSE(validateConfig(c));
   c = good(); c.autoSync = 2; TEST_ASSERT_FALSE(validateConfig(c));
   c = good(); c.pinSet = 0; TEST_ASSERT_FALSE(validateConfig(c));

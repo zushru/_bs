@@ -804,6 +804,32 @@ void test_api_pointer_inputs_fail_closed_without_mutation() {
   TEST_ASSERT_FALSE(g.r.active(6));
 }
 
+void test_api_day_inclusive_term_bounds() {
+  TEST_ASSERT_TRUE(apiDayInInclusiveTerm(100, 100, 100));
+  TEST_ASSERT_TRUE(apiDayInInclusiveTerm(400, 100, 400));
+  TEST_ASSERT_FALSE(apiDayInInclusiveTerm(99, 100, 400));
+  TEST_ASSERT_FALSE(apiDayInInclusiveTerm(401, 100, 400));
+  TEST_ASSERT_FALSE(apiDayInInclusiveTerm(100, 101, 100));
+  TEST_ASSERT_TRUE(apiDayInInclusiveTerm(MAX_TERM_DAY, MAX_TERM_DAY, MAX_TERM_DAY));
+  TEST_ASSERT_FALSE(apiDayInInclusiveTerm(MAX_TERM_DAY + 1, 0, MAX_TERM_DAY));
+  TEST_ASSERT_FALSE(apiDayInInclusiveTerm(1, -1, 2));
+}
+void test_term_end_is_inclusive_for_api_mutations() {
+  Roster g; g.add(5, "Ana");
+  const int32_t finalDay = monday();
+  ApiCtx c = ctxAt(finalDay, 10 * 60);
+  c.termStart = finalDay; c.termEnd = finalDay;
+  Event ev[1]; size_t n = 0;
+  MarkReq mark = {5, (uint16_t)finalDay, 0, ST_PRESENT};
+  TEST_ASSERT_EQUAL_INT(A_OK, buildMark(mark, c, g.r, ev, n).code);
+  NoClassReq noClass = {(uint16_t)finalDay, 0, true, true};
+  TEST_ASSERT_EQUAL_INT(A_OK, buildNoClass(noClass, c, ev, n).code);
+  mark.day = (uint16_t)(finalDay + 1);
+  TEST_ASSERT_EQUAL_INT(R_OUT_OF_TERM, buildMark(mark, c, g.r, ev, n).reason);
+  noClass.day = (uint16_t)(finalDay + 1);
+  TEST_ASSERT_EQUAL_INT(R_OUT_OF_TERM, buildNoClass(noClass, c, ev, n).reason);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_authorize_matches_oracle_everywhere);
@@ -823,6 +849,8 @@ int main() {
   RUN_TEST(test_reqring_does_not_cache_failed_results);
   RUN_TEST(test_reqring_eviction_and_leak_guard);
   RUN_TEST(test_mark_valid_and_event_shape);
+  RUN_TEST(test_api_day_inclusive_term_bounds);
+  RUN_TEST(test_term_end_is_inclusive_for_api_mutations);
   RUN_TEST(test_mark_rejections);
   RUN_TEST(test_mark_today_window_rule);
   RUN_TEST(test_noclass_rules_and_shape);

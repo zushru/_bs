@@ -149,7 +149,7 @@ void test_nightly_boots_write_no_gaps() {
   Timetable tt = defaultTimetable();
   Params p = P();
   FakeRoster ro(45);
-  ClosureEngine eng(l, p, tt, ro, 45, FRI - 60);
+  ClosureEngine eng(l, p, tt, ro, 45, FRI - 60, FRI);
   for (int d = 0; d < 50; d++) {
     int32_t day = FRI - 50 + d;
     if (weekdayIndex(day) > 4) continue;
@@ -165,7 +165,7 @@ void test_boot_inside_window_clips_gap() {
   Timetable tt = defaultTimetable();
   Params p = P();
   FakeRoster ro(45);
-  ClosureEngine eng(l, p, tt, ro, 45, FRI);
+  ClosureEngine eng(l, p, tt, ro, 45, FRI, FRI);
   eng.onBoot(E(FRI, 480), E(FRI, 460));                 // down 07:40 -> 08:00; window opens 07:45
   Event e;
   TEST_ASSERT_TRUE(l.at(0, e));
@@ -180,7 +180,7 @@ void test_engine_refuses_without_index() {
   Timetable tt = defaultTimetable();
   Params p = P();
   FakeRoster ro(45);
-  ClosureEngine eng(l, p, tt, ro, 45, FRI);                          // its attach must fail
+  ClosureEngine eng(l, p, tt, ro, 45, FRI, FRI);                          // its attach must fail
   size_t before = l.count();
   TEST_ASSERT_FALSE(eng.step(E(FRI, 800)));
   TEST_ASSERT_TRUE(eng.pending());
@@ -215,7 +215,7 @@ void test_retry_of_complete_gap_append_does_not_consume_index_capacity() {
   Timetable tt = defaultTimetable();
   Params p = P();
   FakeRoster ro(45);
-  ClosureEngine eng(retry, p, tt, ro, 45, FRI);
+  ClosureEngine eng(retry, p, tt, ro, 45, FRI, FRI);
   TEST_ASSERT_FALSE(eng.index().gapOverflow());
   TEST_ASSERT_EQUAL_UINT32(1, eng.index().gapCount());
   TEST_ASSERT_TRUE(eng.step(E(FRI, 800)));
@@ -341,7 +341,7 @@ void test_engine_gap_overflow_is_unverified() {
   Timetable tt = defaultTimetable();
   Params p = P();
   FakeRoster ro(45);
-  ClosureEngine eng(l, p, tt, ro, 45, FRI);
+  ClosureEngine eng(l, p, tt, ro, 45, FRI, FRI);
   TEST_ASSERT_TRUE(eng.index().gapOverflow());
   TEST_ASSERT_TRUE(eng.step(E(FRI, 800)));              // session 0 ends 12:30 -> closed
   Event e; bool found = false, cov = true;

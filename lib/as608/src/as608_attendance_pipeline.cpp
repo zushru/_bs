@@ -41,7 +41,7 @@ bool As608AttendancePipeline::begin(uint32_t nowEpoch) {
   if (active_ || !sensor_.ready() || !occupancy_.valid ||
       !roster_.historyComplete() || log_.faulted() || nowEpoch == 0) return false;
   const int32_t day = dayNumber(nowEpoch, config_.params.utcOffsetMin);
-  if (day < config_.termStart || day >= config_.termEnd) return false;
+  if (day < config_.termStart || day > config_.termEnd) return false;
   const int session = sessionAt(config_.tt, config_.params, nowEpoch);
   if (session < 0 || session > 1) return false;
   if (!admission_.allowScan(day, (uint8_t)session)) return false;
@@ -65,7 +65,7 @@ AttendancePipelineResult As608AttendancePipeline::saveMatch_(uint16_t physicalPa
   const int session = sessionAt(config_.tt, config_.params, scanEpoch_);
   if (session < 0 || session > 1) return ATT_PIPE_REJECTED;
   const int32_t day = dayNumber(scanEpoch_, config_.params.utcOffsetMin);
-  if (day < config_.termStart || day >= config_.termEnd ||
+  if (day < config_.termStart || day > config_.termEnd ||
       !admission_.allowScan(day, (uint8_t)session)) return ATT_PIPE_REJECTED;
 
   if (admission_.alreadyScanned(day, (uint8_t)session, id))

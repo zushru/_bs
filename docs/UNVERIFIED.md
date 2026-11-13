@@ -2,6 +2,8 @@
 
 The following items are not passes. This index is current at the stated baseline; consult the controlling specs and owner tests for exact procedures.
 
+- **C18/E26:** inclusive term-end contract is source-implemented (`0 <= termStart <= termEnd <= 31446`), including API mutation, scan, closure, config and first-run parser boundaries. New owning/dependent regression source is NOT RUN. There is no production day-view route; future read routes must call `apiDayInInclusiveTerm()`. C17 historical timetable-effective policy remains unresolved.
+
 - **C13.3:** mounted production-owner ESP32 LittleFS/VFS behavior; actual descriptor and close faults; low/near-full storage; file-data and parent-directory durability; restart/interruption matrix; real power-cut and brownout observations. POSIX/fake-backend tests and the standalone VFS diagnostic do not prove the production owner.
 - **C1/C34:** real boot-order proof through the one authoritative `ConfigBootCoordinator`; actual NVS owner order and remaining raw/alternate erase surfaces; safe physical startup evidence. The current erase wrapper is deliberately described narrowly.
 - **C3:** actual production root/scheduler and one authoritative composition for storage, config boot, AS608, clock, attendance, closure and health; real clock caller reconciliation after uncertain commits.

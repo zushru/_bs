@@ -16,10 +16,12 @@ class IRoster {
 // NOTE: ClosureEngine embeds a LogIndex (~14 KB). Allocate it statically or on the heap, never on a task stack.
 class ClosureEngine {
  public:
-  ClosureEngine(LogStore& log, const Params& p, const Timetable& t, IRoster& r, uint16_t cap, int32_t termStartDay);
-  // Call after config validation and durable commit, serialized with engine operations.
-  // Preserves the existing LogIndex, last tick, and health-gap state.
-  void setSchedule(const Params& p, const Timetable& t, int32_t termStartDay);
+  ClosureEngine(LogStore& log, const Params& p, const Timetable& t, IRoster& r,
+                uint16_t cap, int32_t termStartDay, int32_t termEndDay);
+  // Both local-day bounds are inclusive and must fit Event::b (uint16_t).
+  // Call only after config validation/durable commit, serialized with engine work.
+  void setSchedule(const Params& p, const Timetable& t,
+                   int32_t termStartDay, int32_t termEndDay);
   void onBoot(uint32_t now, uint32_t lastTickFromNvs);
   void onHealth(uint32_t now, bool healthy, uint16_t cause);
   bool onTick(uint32_t now);
@@ -37,7 +39,7 @@ class ClosureEngine {
   bool clipToWindows(uint32_t from, uint32_t to, uint32_t& cf, uint32_t& ct) const;
   bool closeSession(int32_t day, int s, uint32_t now);
   LogStore& log_; Params p_; Timetable t_; IRoster& roster_;
-  uint16_t cap_; int32_t term_;
+  uint16_t cap_; int32_t termStart_, termEnd_;
   uint32_t lastTick_, badSince_; uint16_t badCause_;
   bool bad_, pending_, indexOk_;
   LogIndex index_;

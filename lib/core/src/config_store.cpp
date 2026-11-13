@@ -56,7 +56,8 @@ bool validateConfig(const Config& c) {
       const Slot& x = c.tt.day[d][s];
       if (x.enabled && c.params.lateMin >= (uint16_t)(x.end - x.start)) return false;
     }
-  if (c.termStart < 0 || c.termEnd <= c.termStart) return false;
+  if (c.termStart < 0 || c.termStart > MAX_TERM_DAY ||
+      c.termEnd < c.termStart || c.termEnd > MAX_TERM_DAY) return false;
   if (c.autoSync > 1 || c.soundMode > 2) return false;
   if (c.pinSet != 1 || allZero(c.pinHash, sizeof c.pinHash)) return false;
   size_t n = 0;

@@ -38,8 +38,9 @@ bool secretsDiffer(const Config& a, const Config& b) {
          memcmp(a.pinSalt, b.pinSalt, sizeof a.pinSalt) != 0 || memcmp(a.wifiPass, b.wifiPass, sizeof a.wifiPass) != 0;
 }
 ApiResult dayChecks(int32_t day, const ApiCtx& c, bool allowFuture, uint8_t session) {
-  if (session > 1 || day < 0 || day > 65535) return res(A_INVALID, R_BAD_FIELD);
-  if (day < c.termStart || day > c.termEnd) return res(A_INVALID, R_OUT_OF_TERM);
+  if (session > 1 || day < 0 || day > MAX_TERM_DAY) return res(A_INVALID, R_BAD_FIELD);
+  if (!apiDayInInclusiveTerm(day, c.termStart, c.termEnd))
+    return res(A_INVALID, R_OUT_OF_TERM);
   int32_t today = dayNumber(c.now, c.p.utcOffsetMin);
   if (today < 0) return res(A_LOCKED, R_STATE);
   if (!allowFuture && day > today) return res(A_INVALID, R_FUTURE);
@@ -47,6 +48,13 @@ ApiResult dayChecks(int32_t day, const ApiCtx& c, bool allowFuture, uint8_t sess
   return res(A_OK);
 }
 }  // namespace
+
+bool apiDayInInclusiveTerm(int32_t day, int32_t termStart, int32_t termEnd) {
+  return day >= 0 && day <= MAX_TERM_DAY &&
+      termStart >= 0 && termStart <= MAX_TERM_DAY &&
+      termEnd >= termStart && termEnd <= MAX_TERM_DAY &&
+      day >= termStart && day <= termEnd;
+}
 
 ApiResult authorize(Ep ep, HState h, bool tokenValid, bool setupCodeOk) {
   if (ep >= EP_COUNT || h > H_SENSOR_FAULT) return res(A_BAD, R_BAD_FIELD);

@@ -133,7 +133,7 @@ static int closedExpected(Occupancy& o, Rig& g, int* closes) {
   Params p = {0, 30, 15};
   Timetable tt = defaultTimetable();
   EnrolledRoster er(g.r, o);
-  ClosureEngine eng(g.ls, p, tt, er, 300, FRI);
+  ClosureEngine eng(g.ls, p, tt, er, 300, FRI, FRI);
   eng.onBoot(E(FRI, 400), 0);
   for (uint32_t t = E(FRI, 465); t <= E(FRI, 760); t += 10) { eng.onHealth(t, true, GAP_SENSOR); eng.onTick(t); eng.step(t); }
   Event e; int exp = -1; *closes = 0;

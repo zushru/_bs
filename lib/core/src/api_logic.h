@@ -85,6 +85,9 @@ class ReqRing {
 struct ApiCtx { uint32_t now; Params p; Timetable tt; int32_t termStart, termEnd; uint16_t cap; };
 struct MarkReq { uint16_t id; uint16_t day; uint8_t session; uint8_t status; };
 struct NoClassReq { uint16_t day; uint8_t session; bool wholeDay; bool set; };
+// Shared boundary check for mutations and future read/day-view routes.
+// Both configured endpoints are inclusive local day numbers in [0, 65535].
+bool apiDayInInclusiveTerm(int32_t day, int32_t termStart, int32_t termEnd);
 ApiResult buildMark(const MarkReq& r, const ApiCtx& c, const RosterStore& roster, Event* out, size_t& cnt);   // out >= 1
 ApiResult buildNoClass(const NoClassReq& r, const ApiCtx& c, Event* out, size_t& cnt);                     // out >= 1
 ApiResult rosterSet(const RosterStore& r, uint16_t id, const char* name, size_t n, uint32_t now, Event* out, size_t& cnt);   // out >= 5

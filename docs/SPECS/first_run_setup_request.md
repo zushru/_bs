@@ -40,7 +40,7 @@ All root and config properties are required exactly once. Unknown keys, duplicat
 
 - `setup_code` and `initial_pin`: exactly six ASCII decimal digits. The existing first-run boundary enforces PIN weakness policy and the signed E33 code lifecycle/lockout.
 - `utc_offset_min`: -720..840; `late_min`: 0..240; `scan_lead_min`: 0..60.
-- `term_start_day` / `term_end_day`: nonnegative local day numbers since 2020-01-01; end is inclusive and must be >= start (E26).
+- `term_start_day` / `term_end_day`: inclusive local day numbers since 2020-01-01; both are 0..31446 and end may equal start for a one-day term (E26, delegated); 31446 is 2106-02-05, the last full local day safe for uint32 Unix timestamps at every supported offset.
 - `auto_sync`: integer 0 or 1. `sound_mode`: integer 0..2.
 - `timetable`: five weekday arrays Monday through Friday; each has two slots in AM/PM order. Each slot is `[startMinute, endMinute, enabled]`; the enabled member must be a JSON boolean. Existing Config validation applies all detailed schedule rules.
 

@@ -1,3 +1,9 @@
+## 2026-11-13 — ATT-E26-INCLUSIVE-TERM-01 — align inclusive term-end source contract (source only)
+
+- Recorded E26 as DELEGATED: the final configured local calendar day is included; `0 <= termStart <= termEnd <= 31446`; one-day terms are valid.
+- Aligned Config validation, first-run parsing, API mark/no-class, AS608 scan begin/commit, ClosureEngine tick/CLOSE/sweep/outage clipping, restore replay and both config-runtime rebinding paths. Added shared `apiDayInInclusiveTerm()` for future read/day-view routes.
+- Added owning/dependent regression source. NOT RUN. Historical Nov 12 193/193 output belongs to another source state and is not credited to this increment. C18 remains unverified; C17/E2 still block schedule changes.
+
 ## 2026-11-13 — ATT-READONLY-VFS-MOUNT-01 — enforce boot-shell LittleFS read-only mode (source only)
 
 - Changed the ESP32 LittleFS mount configuration from `read_only=false` to `read_only=true`. Formatting and grow-on-mount remain disabled. The boot shell now requests VFS-level write protection in addition to its source-level read-only replay path.

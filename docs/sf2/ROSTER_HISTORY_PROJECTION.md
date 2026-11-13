@@ -44,6 +44,6 @@ Before exporting a report-month roster, a future coordinator must require all of
 4. The full `RosterNameHistoryReader` stream reaches `ROSTER_NAME_END` without error.
 5. The coordinator freezes the log revision while deriving intervals/names and builds the report roster using the signed month-overlap rule.
 6. A separate versioned reporting-identity store supplies LRN, sex, parsed name components and movement metadata.
-7. The timetable/calendar coverage is independently proven; this roster projection cannot clear C17/E2 or C18/E26.
+7. The timetable/calendar coverage is independently proven; this roster projection cannot clear C17/E2, and it cannot clear E26 until the current source regressions pass and the day-view route uses `apiDayInInclusiveTerm()`.
 
 `EventGroupAudit` validates current event-group structure and selected current-writer record fields. It is neither a cryptographic log verifier nor a full validator for every future event type. Unsupported event types fail closed until their schema is implemented.

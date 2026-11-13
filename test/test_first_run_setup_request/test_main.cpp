@@ -240,6 +240,33 @@ void test_term_days_are_nonnegative_and_ordered() {
       decodeFirstRunSetupRequest(json, strlen(json), request));
 }
 
+void test_term_days_allow_one_inclusive_day_but_reject_epoch_horizon_overflow() {
+  char json[sizeof kValid + 32];
+  char json2[sizeof kValid + 32];
+  FirstRunSetupRequest request = emptyRequest();
+  TEST_ASSERT_TRUE(replaceFirst(kValid, "\"term_end_day\":300",
+      "\"term_end_day\":10", json, sizeof json));
+  TEST_ASSERT_EQUAL_INT(FRSR_OK, decodeFirstRunSetupRequest(json, strlen(json), request));
+  TEST_ASSERT_EQUAL_INT(10, request.config.termStart);
+  TEST_ASSERT_EQUAL_INT(10, request.config.termEnd);
+  TEST_ASSERT_TRUE(replaceFirst(kValid, "\"term_end_day\":300",
+      "\"term_end_day\":31446", json, sizeof json));
+  TEST_ASSERT_EQUAL_INT(FRSR_OK, decodeFirstRunSetupRequest(json, strlen(json), request));
+  TEST_ASSERT_EQUAL_INT(MAX_TERM_DAY, request.config.termEnd);
+  TEST_ASSERT_TRUE(replaceFirst(json, "\"term_start_day\":10",
+      "\"term_start_day\":31446", json2, sizeof json2));
+  TEST_ASSERT_EQUAL_INT(FRSR_OK, decodeFirstRunSetupRequest(json2, strlen(json2), request));
+  TEST_ASSERT_EQUAL_INT(MAX_TERM_DAY, request.config.termStart);
+  TEST_ASSERT_EQUAL_INT(MAX_TERM_DAY, request.config.termEnd);
+  TEST_ASSERT_TRUE(replaceFirst(kValid, "\"term_end_day\":300",
+      "\"term_end_day\":31447", json, sizeof json));
+  TEST_ASSERT_EQUAL_INT(FRSR_INVALID_REQUEST, decodeFirstRunSetupRequest(json, strlen(json), request));
+  TEST_ASSERT_TRUE(replaceFirst(kValid, "\"term_end_day\":300",
+      "\"term_end_day\":31447", json, sizeof json));
+  TEST_ASSERT_TRUE(replaceFirst(json, "\"term_start_day\":10",
+      "\"term_start_day\":31447", json2, sizeof json2));
+  TEST_ASSERT_EQUAL_INT(FRSR_INVALID_REQUEST, decodeFirstRunSetupRequest(json2, strlen(json2), request));
+}
 void test_trailing_commas_at_both_object_levels_are_rejected() {
   char json[sizeof kValid + 16];
   FirstRunSetupRequest request = emptyRequest();
@@ -418,6 +445,7 @@ int main(int, char**) {
   RUN_TEST(test_timetable_requires_five_days_two_sessions_and_three_slot_values);
   RUN_TEST(test_timetable_enabled_flag_requires_json_boolean);
   RUN_TEST(test_term_days_are_nonnegative_and_ordered);
+  RUN_TEST(test_term_days_allow_one_inclusive_day_but_reject_epoch_horizon_overflow);
   RUN_TEST(test_trailing_commas_at_both_object_levels_are_rejected);
   RUN_TEST(test_trailing_data_and_empty_document_are_rejected);
   RUN_TEST(test_request_body_limit_is_enforced);

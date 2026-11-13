@@ -22,7 +22,9 @@ struct Rig {
   Timetable tt;
   Params p;
   ClosureEngine eng;
-  Rig(int32_t term = FRI) : log(ms), roster(45), tt(defaultTimetable()), p{0, 30, 15}, eng(log, p, tt, roster, 162, term) { log.open(); }
+  Rig(int32_t term = FRI, int32_t end = FRI)
+      : log(ms), roster(45), tt(defaultTimetable()), p{0, 30, 15},
+        eng(log, p, tt, roster, 162, term, end) { log.open(); }
   void run(int32_t day, int from, int to, bool healthy = true) {
     for (uint32_t t = E(day, from); t <= E(day, to); t += 10) {
       eng.onHealth(t, healthy, GAP_SENSOR);
@@ -347,7 +349,7 @@ void test_engine_set_schedule_updates_window_and_session_end() {
   Timetable nextT = defaultTimetable();
   nextT.day[4][0].start = 500;  // Friday 08:20
   nextT.day[4][0].end = 765;    // Friday 12:45
-  r.eng.setSchedule(nextP, nextT, FRI);
+  r.eng.setSchedule(nextP, nextT, FRI, FRI);
 
   TEST_ASSERT_FALSE(r.eng.onTick(E(FRI, 469)));  // New window opens at 07:50, not old 07:45.
   TEST_ASSERT_TRUE(r.eng.onTick(E(FRI, 470)));
@@ -373,7 +375,7 @@ void test_engine_set_schedule_updates_utc_offset() {
   Rig r;
   Params nextP = {480, 30, 15};
   Timetable nextT = defaultTimetable();
-  r.eng.setSchedule(nextP, nextT, FRI);
+  r.eng.setSchedule(nextP, nextT, FRI, FRI);
 
   // 04:29 UTC is 12:29 PHT; the AM session closes at 12:30 PHT.
   TEST_ASSERT_TRUE(r.eng.step(E(FRI, 269)));
@@ -385,13 +387,58 @@ void test_engine_set_schedule_updates_term_start() {
   Rig r(FRI - 10);
   Params nextP = {0, 30, 15};
   Timetable nextT = defaultTimetable();
-  r.eng.setSchedule(nextP, nextT, FRI);
+  r.eng.setSchedule(nextP, nextT, FRI, FRI);
 
   // Monday is after the old term start but before the newly configured term start.
   TEST_ASSERT_TRUE(r.eng.step(E(FRI - 4, 1000)));
   TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
   TEST_ASSERT_TRUE(r.eng.step(E(FRI, 750)));
   TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+}
+
+void test_constructor_rejects_term_day_beyond_uint32_epoch_horizon() {
+  Rig valid(MAX_TERM_DAY, MAX_TERM_DAY);
+  TEST_ASSERT_TRUE(valid.eng.ready());
+  Rig invalid(MAX_TERM_DAY, MAX_TERM_DAY + 1);
+  TEST_ASSERT_FALSE(invalid.eng.ready());
+}
+void test_term_end_is_inclusive_and_closure_stops_after_it() {
+  Rig r(FRI - 1, FRI);
+  TEST_ASSERT_FALSE(r.eng.onTick(E(FRI + 1, 465)));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI + 1, 1000)));
+  TEST_ASSERT_EQUAL_INT(4, r.countType(EV_CLOSE));
+  Event e;
+  for (size_t i = 0; i < r.log.count(); ++i) {
+    TEST_ASSERT_TRUE(r.log.at(i, e));
+    if (e.type == EV_CLOSE) TEST_ASSERT_TRUE((int32_t)e.b <= FRI);
+  }
+  const size_t before = r.log.count();
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI + 2, 1000)));
+  TEST_ASSERT_EQUAL_UINT32(before, r.log.count());
+}
+void test_term_end_clips_outage_gap_to_last_configured_day() {
+  Rig r(FRI - 1, FRI);
+  r.eng.onBoot(E(FRI + 1, 500), E(FRI, 600));
+  Event e; size_t gaps = 0;
+  for (size_t i = 0; i < r.log.count(); ++i) {
+    TEST_ASSERT_TRUE(r.log.at(i, e));
+    if (e.type == EV_GAP) {
+      ++gaps;
+      TEST_ASSERT_EQUAL_UINT32(E(FRI, 600), e.epoch);
+      TEST_ASSERT_EQUAL_UINT16(390, e.b);
+    }
+  }
+  TEST_ASSERT_EQUAL_UINT32(1, gaps);
+}
+void test_engine_set_schedule_updates_term_end() {
+  Rig r(FRI - 1, FRI + 10);
+  Params nextP = {0, 30, 15};
+  Timetable nextT = defaultTimetable();
+  r.eng.setSchedule(nextP, nextT, FRI - 1, FRI);
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI + 1, 1000)));
+  TEST_ASSERT_EQUAL_INT(4, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI + 2, 1000)));
+  TEST_ASSERT_EQUAL_INT(4, r.countType(EV_CLOSE));
 }
 
 void test_no_close_for_weekend_or_before_term() {
@@ -738,6 +785,10 @@ int main() {
   RUN_TEST(test_engine_set_schedule_updates_window_and_session_end);
   RUN_TEST(test_engine_set_schedule_updates_utc_offset);
   RUN_TEST(test_engine_set_schedule_updates_term_start);
+  RUN_TEST(test_constructor_rejects_term_day_beyond_uint32_epoch_horizon);
+  RUN_TEST(test_term_end_is_inclusive_and_closure_stops_after_it);
+  RUN_TEST(test_term_end_clips_outage_gap_to_last_configured_day);
+  RUN_TEST(test_engine_set_schedule_updates_term_end);
   RUN_TEST(test_no_close_for_weekend_or_before_term);
   RUN_TEST(test_long_gap_is_chunked_and_marks_old_sessions);
   RUN_TEST(test_tick_only_in_window_and_every_300s);

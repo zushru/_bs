@@ -326,7 +326,7 @@ void test_closure_refuses_to_close_when_roster_history_is_incomplete() {
 
   Params params = {480, 30, 15};
   Timetable timetable = defaultTimetable();
-  ClosureEngine closure(g.ls, params, timetable, enrolled, MAX_ID, 1);
+  ClosureEngine closure(g.ls, params, timetable, enrolled, MAX_ID, 1, 1);
   const uint32_t afterAmEnd = dayStartEpoch(1, 480) + 13u * 3600u;
   TEST_ASSERT_FALSE(closure.step(afterAmEnd));
   TEST_ASSERT_TRUE(closure.pending());

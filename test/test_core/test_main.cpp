@@ -109,6 +109,20 @@ void test_payload_all_bits() {
 
 // ---------- time_rules ----------
 static const uint32_t FRI_2026_10_30 = 1793318400u;   // 00:00 UTC, day 2494
+void test_max_term_day_is_last_full_local_day_for_all_supported_offsets() {
+  const uint64_t minusTwelveEnd =
+      (uint64_t)dayStartEpoch(MAX_TERM_DAY, -720) + 86399u;
+  const uint64_t nextMinusTwelveEnd =
+      (uint64_t)dayStartEpoch(MAX_TERM_DAY + 1, -720) + 86399u;
+  const uint64_t plusFourteenEnd =
+      (uint64_t)dayStartEpoch(MAX_TERM_DAY, 840) + 86399u;
+  TEST_ASSERT_TRUE(minusTwelveEnd <= 0xFFFFFFFFull);
+  TEST_ASSERT_TRUE(plusFourteenEnd <= 0xFFFFFFFFull);
+  TEST_ASSERT_TRUE(nextMinusTwelveEnd > 0xFFFFFFFFull);
+  TEST_ASSERT_EQUAL_INT(MAX_TERM_DAY,
+      dayNumber((uint32_t)minusTwelveEnd, -720));
+  TEST_ASSERT_EQUAL_INT(MAX_TERM_DAY + 1, dayNumber(0xFFFFFFFFu, -720));
+}
 void test_day_numbers() {
   TEST_ASSERT_EQUAL_INT(0, dayNumber(EPOCH_2020, 0));
   TEST_ASSERT_EQUAL_INT(-1, dayNumber(EPOCH_2020 - 1, 0));
@@ -225,6 +239,7 @@ int main() {
   RUN_TEST(test_bitmap_300);
   RUN_TEST(test_payload_counts);
   RUN_TEST(test_payload_all_bits);
+  RUN_TEST(test_max_term_day_is_last_full_local_day_for_all_supported_offsets);
   RUN_TEST(test_day_numbers);
   RUN_TEST(test_weekdays);
   RUN_TEST(test_minute_of_day);

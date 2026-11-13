@@ -2,6 +2,9 @@
 #include <stdint.h>
 namespace att {
 const uint32_t EPOCH_2020 = 1577836800u;   // 2020-01-01 00:00:00 UTC (a Wednesday)
+// Latest full local day representable by uint32 Unix seconds for every
+// supported UTC offset (-12:00..+14:00). Day 31446 is 2106-02-05.
+const int32_t MAX_TERM_DAY = 31446;
 struct Slot { uint16_t start; uint16_t end; bool enabled; };   // minutes from local midnight
 struct Timetable { Slot day[5][2]; };                          // Mon..Fri x (0 = AM, 1 = PM)
 struct Params { int16_t utcOffsetMin; uint16_t lateMin; uint16_t scanLeadMin; };

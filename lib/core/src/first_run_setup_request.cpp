@@ -221,11 +221,11 @@ class JsonReader {
         config.params.scanLeadMin = static_cast<uint16_t>(value);
       } else if (strcmp(key, "term_start_day") == 0) {
         bit = 0x0008;
-        if (!integer_(0, INT32_MAX, value)) return false;
+        if (!integer_(0, MAX_TERM_DAY, value)) return false;
         config.termStart = static_cast<int32_t>(value);
       } else if (strcmp(key, "term_end_day") == 0) {
         bit = 0x0010;
-        if (!integer_(0, INT32_MAX, value)) return false;
+        if (!integer_(0, MAX_TERM_DAY, value)) return false;
         config.termEnd = static_cast<int32_t>(value);
       } else if (strcmp(key, "auto_sync") == 0) {
         bit = 0x0020;

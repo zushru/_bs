@@ -29,7 +29,7 @@ A zero-length gap (gapFrom == gapTo) is valid and writes the two-record CLOCK_SE
 
 There is no production clock HTTP route or firmware caller in this tree (C3). A future caller must explicitly handle all four results and stop normal writes/reopen after CLOCK_APPLY_COMMIT_UNCERTAIN; merely checking for CLOCK_APPLY_COMMITTED is not enough to restore the clock. The result enum does not provide a durable request ID, exactly-once retry, or automatic recovery. Repeating a logical clock request after an uncertain write can duplicate GAP records. Partial-tail recovery remains blocked by C13.
 
-The clock decision logic still depends on trusted RTC, current log reference, confirmation policy and window facts supplied by the application. This change does not resolve C17 schedule-effective history or C18 term-end semantics.
+The clock decision logic still depends on trusted RTC, current log reference, confirmation policy and window facts supplied by the application. E26 now defines inclusive term-end semantics in source, but its regressions are NOT RUN and no production day-view route consumes the shared term guard. C17 schedule-effective history remains unresolved.
 
 ## Regression coverage
 

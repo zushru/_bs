@@ -8,7 +8,7 @@ bool AttendanceConfigRuntime::canApply(const Config& next) const {
 
 bool AttendanceConfigRuntime::applyAfterCommit(const Config& next) {
   if (!pipeline_.setConfigAfterCommit(next)) return false;
-  closure_.setSchedule(next.params, next.tt, next.termStart);
+  closure_.setSchedule(next.params, next.tt, next.termStart, next.termEnd);
   return true;
 }
 

@@ -7,7 +7,7 @@ RestoreReplayAudit::RestoreReplayAudit(IStorage& staged,
     : staged_(staged), validator_(validator), config_(validator.config()),
       replayLog_(staged_), roster_(config_.params.utcOffsetMin),
       closure_(replayLog_, config_.params, config_.tt, roster_, MAX_ID,
-               config_.termStart),
+               config_.termStart, config_.termEnd),
       groups_(), validatedAtConstruction_(validator.ok()), ran_(false),
       result_{RESTORE_REPLAY_NOT_VALIDATED, 0, 0, 0, false, false, false} {}
 

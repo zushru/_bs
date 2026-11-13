@@ -61,6 +61,10 @@ Two sessions, 16-byte random tokens, RAM only, 900 s idle expiry (monotonic seco
 6. Use a cryptographically secure random source for 16-byte tokens and ensure tokens are issued only inside the successful PIN action. v0.2.38 adds the action and RF-gated ESP32 RNG adapter, but its 18 new host tests are unrun, the Wi-Fi lifecycle does not call the adapter, no ESP32 build is pinned, and no HTTP route is present.
 7. After a schedule change passes `validateConfig()` and `canApply()`, persist and verify the config, then call the existing `ClosureEngine::setSchedule()` in the serialized engine context (C1). Do not destroy/recreate the engine: its `LogIndex` is a registered `LogStore` observer.
 
+## Term boundary
+
+All date-bearing API operations must validate local day numbers against the inclusive configured term using `apiDayInInclusiveTerm(day, termStart, termEnd)` before building a day view or mutation. `buildMark()` and `buildNoClass()` use this rule. The production day-view HTTP adapter is not implemented; do not expose an unbounded `buildDayView()` result through a route.
+
 ## Known gaps
 - `PinAuthCoordinator` is a core helper only. A future adapter can bypass it unless all secret-check routes are deliberately wired through it. C6 remains open.
 - GET /status is approved as public only for basic non-sensitive status fields. The exact field list must be constrained by the HTTP adapter; sensitive/admin data must not be included.

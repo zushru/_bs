@@ -15,7 +15,11 @@
 - Continue in the approved order: **C13.3 → C1/C34 → C3 → C6 → C2**. C2 remains gated on storage ownership and an approved recovery design. Continue safe independent work on E18/U5, U61, U112 and SF2 without changing their OPEN/DELEGATED status.
 - Classify blockers as DEVELOPMENT, RELEASE or EVIDENCE blockers. Resolve a development blocker before dependent work; keep release/evidence blockers open while safe independent work proceeds.
 - Use `../DEVELOPMENT_WORKFLOW.md` for the two-pass deadline workflow, session baseline guard, focused test cadence, freeze trigger and batch report. Do not run full native N1 before the approved integration gate.
-- This overlay updates execution status only. It does not change product decisions, recovery policy, API exposure, persisted formats, sensor mapping, term boundaries or any decision status.
+- This overlay updates execution status only. Dated delegated engineering decisions are recorded separately in `docs/DECISIONS.md`; this overlay does not create signed product authority.
+- E26/C18: PISHDA selected an inclusive final local day under the user's explicit engineering delegation. Source bounds the term to `0 <= termStart <= termEnd <= 31446`, permits one-day terms, and aligns API mutations, AS608 scan admission/commit, ClosureEngine tick/close/sweep/outage clipping, configuration validation and first-run parsing. `apiDayInInclusiveTerm()` is available for future day-view/read routes.
+- Regression source added to `test_api`, `test_as608_pipeline`, `test_core`, `test_coreb`, `test_config` and `test_first_run_setup_request`; NOT RUN. C18 remains a release blocker until these suites run and the future day-view route uses the helper. C17/E2 historical schedule-effective policy remains blocking; schedule changes remain disabled.
+- C13.3 `ATT-READONLY-VFS-MOUNT-01` is source-only and committed locally; exact target VFS enforcement/durability remain open. Partition reconciliation remains unresolved; do not change geometry or flash.
+- No test, checker, compiler, build, PlatformIO, flash or hardware operation was run for these increments.
 
 ## Current execution overlay — 2026-11-13
 
