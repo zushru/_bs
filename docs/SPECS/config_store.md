@@ -7,7 +7,7 @@ Status: DELEGATED design (you said "your judgement"). Host tests: test_config (1
 |---|---|---|---|
 | params.utcOffsetMin | int16 | 480 (PHT) | -720..840 |
 | params.lateMin | uint16 | 30 | <= 240 and < length of every enabled slot |
-| params.scanLeadMin | uint16 | 15 | <= 60 |
+| params.scanLeadMin | uint16 | 30 | <= 60; remains configurable under the existing delegated config design |
 | tt | Timetable (5 days x 2 Slot{start,end,enabled}) | defaultTimetable() = 08:00-12:30, 13:30-16:30 | validateTimetable(tt, scanLeadMin) |
 | termStart, termEnd | int32 day numbers (dayNumber, time_rules.h) | -1 (unset) | termStart >= 0, termEnd > termStart |
 | autoSync | uint8 | 1 | 0 or 1 |
@@ -17,6 +17,8 @@ Status: DELEGATED design (you said "your judgement"). Host tests: test_config (1
 | wifiPass[64] | char | empty | 8..63 printable ASCII, NUL-terminated, zero-padded after the NUL |
 
 defaultConfig() is a wizard starting point. It is NOT valid and is never a fallback.
+
+Stored schema-v1 values equal to 15 are normalized to 30 during decode as the former product default. Other explicitly configured values are preserved. Schema v1 has no bit distinguishing a user-selected 15 from the old default; therefore this migration treats every stored 15 as the old default. The normalized configuration is still validated against the 30-minute schedule window, so custom timetables with a start-before-30 or a too-short inter-session gap fail closed and require schedule review.
 
 ## Slot format (192 bytes, erased flash = 0xFF)
 - Header 11 bytes: "ATTC", schemaVer=1, payloadLen u16 = 173, seq u32 (little-endian).
@@ -40,9 +42,9 @@ blank (all 0xFF) -> CD_BLANK; magic -> CD_BAD_MAGIC; version -> CD_BAD_VER; leng
 Write to the non-active slot with seq+1, read it back, compare with configEqual, and only then report success. A torn write leaves the old slot active.
 
 ## Schedule-change gate: canApply(cur, next, windowOpen, unclosedPast)
-Schedule fields = utcOffsetMin, lateMin, scanLeadMin, termStart, termEnd, every timetable slot. Same schedule -> OK. Different schedule -> REFUSED_WINDOW_OPEN if a window is open, REFUSED_UNCLOSED if a past session is unclosed, else OK.
+Schedule fields = utcOffsetMin, lateMin, scanLeadMin, termStart, termEnd, every timetable slot. Same schedule -> OK. Different schedule -> REFUSED_WINDOW_OPEN if a window is open, REFUSED_UNCLOSED if a past session is unclosed, else OK. `ClosureEngine` consumes `utcOffsetMin` and `scanLeadMin` from Params; it does not use `lateMin`, which belongs to scan classification.
 
 ## Known gaps
-- C1 (CRITICAL.md): the ClosureEngine does not receive a changed schedule. This spec's gate is necessary but not sufficient.
+- C1 core support: `ClosureEngine::setSchedule(params, timetable, termStartDay)` updates the existing engine without replacing its `LogIndex` or clearing runtime state. The caller must invoke it only after validation, `canApply()`, and successful durable config commit, and must serialize the call with engine operations. The v0.2.13 ESP32 NVS slot adapter and first-provision path now exist as standalone source, but no production boot caller or HealthFsm fault wiring exists; end-to-end schedule application remains pending.
 - seq wraps at 2^32 with no handling (about 4 billion writes; not a practical risk, noted only).
-- The two booleans in canApply are supplied by the caller. A wrong value silently bypasses the guard.
+- The two booleans in canApply are supplied by the caller. A wrong value silently bypasses the guard. v0.2.16 adds a current-window helper, but C17 blocks safe historical `unclosedPast` derivation until schedule-effective history is persisted (E2 is DELEGATED). C18 also leaves `termEnd` inclusive/exclusive semantics unresolved and shows the closure sweep is not term-bounded. Keep production schedule changes disabled until both findings are resolved.

@@ -30,7 +30,12 @@ struct Occupancy {
 class EnrolledRoster : public IRoster {
  public:
   EnrolledRoster(RosterStore& r, const Occupancy& o) : r_(r), o_(o) {}
-  bool expected(uint16_t id, int32_t day) override { return o_.valid && o_.has(id) && r_.expected(id, day); }
+  bool expected(uint16_t id, int32_t day) override {
+    return historyComplete() && o_.valid && o_.has(id) && r_.expected(id, day);
+  }
+  // This reports roster-history integrity only. Invalid sensor occupancy yields
+  // no expected IDs, but does not make the roster event history itself incomplete.
+  bool historyComplete() const override { return r_.historyComplete(); }
  private:
   RosterStore& r_; const Occupancy& o_;
 };

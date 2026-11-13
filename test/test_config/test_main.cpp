@@ -18,6 +18,39 @@ static Config good() {
   return c;
 }
 static void blank(uint8_t* b) { memset(b, 0xFF, CFG_SLOT_SIZE); }
+static void setStoredScanLead(uint8_t* slot, uint16_t lead) {
+  slot[15] = (uint8_t)lead;
+  slot[16] = (uint8_t)(lead >> 8);
+  const uint16_t crc = crc16(slot, 184);
+  slot[184] = (uint8_t)crc;
+  slot[185] = (uint8_t)(crc >> 8);
+}
+
+void test_default_scan_window_is_thirty_minutes() {
+  const Config c = defaultConfig();
+  TEST_ASSERT_EQUAL_UINT16(30, c.params.scanLeadMin);
+}
+
+void test_legacy_fifteen_minute_scan_lead_is_normalized() {
+  Config encoded = good(), decoded = defaultConfig();
+  uint8_t slot[CFG_SLOT_SIZE];
+  uint32_t seq = 0;
+  TEST_ASSERT_EQUAL_UINT32(186, encodeConfig(encoded, 11, slot));
+  setStoredScanLead(slot, 15);  // v1 slot written before the new 30-minute default
+  TEST_ASSERT_EQUAL_INT(CD_OK, decodeConfig(slot, decoded, seq));
+  TEST_ASSERT_EQUAL_UINT16(30, decoded.params.scanLeadMin);
+  TEST_ASSERT_EQUAL_UINT32(11, seq);
+}
+
+void test_same_generation_slots_with_different_legacy_leads_still_fault() {
+  uint8_t a[CFG_SLOT_SIZE], b[CFG_SLOT_SIZE];
+  Config out = defaultConfig();
+  TEST_ASSERT_EQUAL_UINT32(186, encodeConfig(good(), 9, a));
+  TEST_ASSERT_EQUAL_UINT32(186, encodeConfig(good(), 9, b));
+  setStoredScanLead(a, 15);
+  setStoredScanLead(b, 30);
+  TEST_ASSERT_EQUAL_INT(CB_FAULT, pickSlot(a, b, out).boot);
+}
 
 void test_roundtrip_and_layout() {
   Config c = good(), d = defaultConfig();
@@ -194,6 +227,9 @@ void test_config_equal_detects_each_field() {
 
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_default_scan_window_is_thirty_minutes);
+  RUN_TEST(test_legacy_fifteen_minute_scan_lead_is_normalized);
+  RUN_TEST(test_same_generation_slots_with_different_legacy_leads_still_fault);
   RUN_TEST(test_roundtrip_and_layout);
   RUN_TEST(test_both_blank_is_unprovisioned);
   RUN_TEST(test_bit_flip_falls_back_to_other_slot);

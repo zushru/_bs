@@ -1,0 +1,103 @@
+# Historical patch artifact from 2026-11-02. Do not apply to the current tree.
+# Its bool applyClockSet() excerpt is superseded by ClockApplyResult in v0.2.62.
+
+diff -u a/lib/core/src/clock_policy.cpp b/lib/core/src/clock_policy.cpp
+--- a/lib/core/src/clock_policy.cpp	2026-11-02 14:17:59.159810405 +0000
++++ b/lib/core/src/clock_policy.cpp	2026-11-02 14:17:59.247960020 +0000
+@@ -32,7 +32,16 @@
+ bool applyClockSet(LogStore& log, const ClockDecision& d, uint32_t oldEpoch, uint32_t newEpoch) {
+   Event ev[MAX_GROUP];
+   size_t n = 0;
+-  if (d.gapTo > d.gapFrom) n = makeGapEvents(d.gapFrom, d.gapTo, GAP_CLOCK, ev, MAX_GROUP - 2);
++  uint32_t cur = d.gapFrom;
++  while (d.gapTo > cur) {                                // earlier groups carry the head of a very long span
++    uint32_t next = cur;
++    n = makeGapEvents(cur, d.gapTo, GAP_CLOCK, ev, MAX_GROUP - 2, &next);
++    if (n == 0 || next <= cur) return false;
++    if (next >= d.gapTo) break;                          // last chunks ride with the CLOCK_SET pair
++    if (!log.append(ev, n)) return false;
++    cur = next;
++    n = 0;
++  }
+   ev[n++] = Event{EV_CLOCK_SET, 0, d.source, oldEpoch, 0, 0};
+   ev[n++] = Event{EV_CLOCK_SET, 0, d.source, newEpoch, 0, 0};
+   return log.append(ev, n);
+diff -u a/lib/core/src/closure_engine.cpp b/lib/core/src/closure_engine.cpp
+--- a/lib/core/src/closure_engine.cpp	2026-11-02 14:17:59.154812446 +0000
++++ b/lib/core/src/closure_engine.cpp	2026-11-02 14:17:59.247879462 +0000
+@@ -37,9 +37,7 @@
+ bool ClosureEngine::writeGap(uint32_t from, uint32_t to, uint16_t cause) {
+   uint32_t cf = 0, ct = 0;
+   if (!clipToWindows(from, to, cf, ct)) return true;     // touches no scan window: nothing to record
+-  Event ev[MAX_GROUP];
+-  size_t n = makeGapEvents(cf, ct, cause, ev, MAX_GROUP);
+-  return log_.append(ev, n);
++  return appendGaps(log_, cf, ct, cause);                // multi-group: never silently drops a long outage
+ }
+ void ClosureEngine::onBoot(uint32_t now, uint32_t lastTick) {
+   if (lastTick != 0 && now > lastTick && !writeGap(lastTick, now, GAP_POWER)) {
+diff -u a/lib/core/src/log_store.cpp b/lib/core/src/log_store.cpp
+--- a/lib/core/src/log_store.cpp	2026-11-02 14:17:59.149160707 +0000
++++ b/lib/core/src/log_store.cpp	2026-11-02 14:17:59.247796029 +0000
+@@ -16,12 +16,17 @@
+ }
+ bool LogStore::attach(LogObserver* o) {
+   if (!o || nobs_ >= MAX_OBSERVERS) return false;
++  for (size_t i = 0; i < nobs_; i++) if (obs_[i] == o) return false;   // double registration = double events
+   obs_[nobs_++] = o;
+   o->onReset();
+   if (faulted_) return true;
+   Event e;
+   for (size_t i = 0; i < count_; i++) {
+-    if (!at(i, e)) return false;
++    if (!at(i, e)) {                                  // failed replay: do not leave a half-built observer registered
++      obs_[--nobs_] = nullptr;
++      o->onReset();
++      return false;
++    }
+     o->onRecord(e);
+   }
+   return true;
+@@ -86,7 +91,7 @@
+   if (i >= count_ || !s_.read(i * REC_SIZE, buf, REC_SIZE)) return false;
+   return decode(buf, e);
+ }
+-size_t makeGapEvents(uint32_t from, uint32_t to, uint16_t cause, Event* out, size_t maxOut) {
++size_t makeGapEvents(uint32_t from, uint32_t to, uint16_t cause, Event* out, size_t maxOut, uint32_t* next) {
+   size_t n = 0;
+   uint32_t cur = from;
+   while (cur < to && n < maxOut) {
+@@ -95,6 +100,18 @@
+     out[n++] = Event{EV_GAP, 0, cause, cur, 0, (uint16_t)mins};
+     cur += mins * 60;
+   }
++  if (next) *next = cur;
+   return n;
+ }
++bool appendGaps(LogStore& log, uint32_t from, uint32_t to, uint16_t cause) {
++  uint32_t cur = from;
++  while (cur < to) {
++    Event ev[MAX_GROUP];
++    uint32_t next = cur;
++    size_t n = makeGapEvents(cur, to, cause, ev, MAX_GROUP, &next);
++    if (n == 0 || next <= cur || !log.append(ev, n)) return false;
++    cur = next;
++  }
++  return true;
++}
+ }
+diff -u a/lib/core/src/log_store.h b/lib/core/src/log_store.h
+--- a/lib/core/src/log_store.h	2026-11-02 14:17:59.145293340 +0000
++++ b/lib/core/src/log_store.h	2026-11-02 14:17:59.247578058 +0000
+@@ -42,5 +42,10 @@
+   LogObserver* obs_[MAX_OBSERVERS];
+   size_t nobs_;
+ };
+-size_t makeGapEvents(uint32_t from, uint32_t to, uint16_t cause, Event* out, size_t maxOut);
++// Chunks of GAP records that fit in maxOut events. *next (optional) = where coverage stopped; == to when complete.
++// A caller that ignores *next silently drops the tail of a long span: use appendGaps() or check it.
++size_t makeGapEvents(uint32_t from, uint32_t to, uint16_t cause, Event* out, size_t maxOut, uint32_t* next = nullptr);
++// Records GAPs covering [from,to) in as many commit groups as needed. false = a group failed to append;
++// chunks already written are true gaps, so a retry is safe (it only adds overlap).
++bool appendGaps(LogStore& log, uint32_t from, uint32_t to, uint16_t cause);
+ }

@@ -1,9 +1,30 @@
 #include "closure_engine.h"
+#include "config_store.h"
 namespace att {
 ClosureEngine::ClosureEngine(LogStore& log, const Params& p, const Timetable& t, IRoster& r, uint16_t cap, int32_t term)
     : log_(log), p_(p), t_(t), roster_(r), cap_(cap > MAX_ID ? MAX_ID : cap), term_(term),
       lastTick_(0), badSince_(0), badCause_(0), bad_(false), pending_(false), indexOk_(false) {
   indexOk_ = log_.attach(&index_);      // false = no observer slot: this engine must refuse to close
+}
+bool ClosureEngine::matchesConfig(const Config& config) const {
+  if (term_ != config.termStart ||
+      p_.utcOffsetMin != config.params.utcOffsetMin ||
+      p_.lateMin != config.params.lateMin ||
+      p_.scanLeadMin != config.params.scanLeadMin) return false;
+  for (int day = 0; day < 5; ++day) {
+    for (int session = 0; session < 2; ++session) {
+      const Slot& current = t_.day[day][session];
+      const Slot& expected = config.tt.day[day][session];
+      if (current.start != expected.start || current.end != expected.end ||
+          current.enabled != expected.enabled) return false;
+    }
+  }
+  return true;
+}
+void ClosureEngine::setSchedule(const Params& p, const Timetable& t, int32_t term) {
+  p_ = p;
+  t_ = t;
+  term_ = term;
 }
 // Only the part of [from,to) that touches scan windows can change coverage. Clip to the span from the first
 // overlapped window start to the last overlapped window end. Nights and weekends with no window are dropped.
@@ -59,7 +80,7 @@ bool ClosureEngine::onTick(uint32_t now) {
   return true;
 }
 bool ClosureEngine::closeSession(int32_t day, int s, uint32_t now) {
-  if (index_.closeOverflow()) return false;            // cannot record closes safely
+  if (!roster_.historyComplete() || index_.closeOverflow()) return false;            // cannot record closes safely
   const Slot& sl = t_.day[weekdayIndex(day)][s];
   uint32_t ds = dayStartEpoch(day, p_.utcOffsetMin);
   uint32_t ws = ds + (uint32_t)(sl.start - p_.scanLeadMin) * 60;

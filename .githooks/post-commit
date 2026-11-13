@@ -1,0 +1,12 @@
+#!/bin/sh
+# Push main when five or more commits are unpublished to origin/main.
+set -eu
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+[ "$branch" = "main" ] || exit 0
+upstream=$(git rev-parse --symbolic-full-name '@{u}' 2>/dev/null || true)
+[ "$upstream" = "refs/remotes/origin/main" ] || exit 0
+ahead=$(git rev-list --count "$upstream..HEAD")
+if [ "$ahead" -ge 5 ]; then
+  printf '%s\n' "PISHDA: $ahead commits ahead of origin/main; pushing now."
+  git push origin HEAD:refs/heads/main
+fi

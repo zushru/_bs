@@ -13,7 +13,7 @@ void tearDown() {}
 
 struct MemStore : IStorage {
   std::vector<uint8_t> d; bool failRead = false;
-  size_t size() override { return d.size(); }
+  bool sizeChecked(size_t& out) override { out = d.size(); return true; }
   bool read(size_t o, uint8_t* b, size_t n) override { if (failRead || o + n > d.size()) return false; memcpy(b, d.data() + o, n); return true; }
   bool append(const uint8_t* b, size_t n) override { d.insert(d.end(), b, b + n); return true; }
   bool truncate(size_t n) override { d.resize(n); return true; }
@@ -73,7 +73,7 @@ void test_clock_set_with_very_long_gap() {
   ClockDecision d;
   d.action = CA_APPLY; d.delta = 0; d.source = 1; d.needsAttention = false;
   d.gapFrom = 5000; d.gapTo = 5000 + 4u * 365u * 86400u;       // 4 years: more than one group of GAPs
-  TEST_ASSERT_TRUE(applyClockSet(ls, d, 111, 222));
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_COMMITTED, applyClockSet(ls, d, 111, 222));
   size_t gaps = 0;
   checkCoverage(ls, d.gapFrom, d.gapTo, GAP_CLOCK, &gaps);
   TEST_ASSERT_TRUE(gaps > 14);
@@ -116,9 +116,15 @@ void test_duplicate_attach_is_refused() {
 struct FakeFiles : IFileSet {
   struct F { uint32_t key; std::vector<uint8_t> d; };
   std::vector<F> f;
-  size_t count() override { return f.size(); }
-  uint32_t monthKey(size_t i) override { return f[i].key; }
-  size_t fileSize(size_t i) override { return f[i].d.size(); }
+  bool countChecked(size_t& out) override { out = f.size(); return true; }
+  bool monthKeyChecked(size_t i, uint32_t& out) override {
+    if (i >= f.size()) return false;
+    out = f[i].key; return true;
+  }
+  bool fileSizeChecked(size_t i, size_t& out) override {
+    if (i >= f.size()) return false;
+    out = f[i].d.size(); return true;
+  }
   bool readFile(size_t i, size_t o, uint8_t* b, size_t n) override { if (o + n > f[i].d.size()) return false; memcpy(b, f[i].d.data() + o, n); return true; }
   bool appendFile(size_t i, const uint8_t* b, size_t n) override { f[i].d.insert(f[i].d.end(), b, b + n); return true; }
   bool truncateFile(size_t i, size_t n) override { f[i].d.resize(n); return true; }

@@ -75,30 +75,45 @@ uint32_t PinLockout::lockSeconds(uint16_t fails) {
 }
 void PinLockout::boot(uint16_t persistedFails, uint32_t nowS) {
   fails_ = persistedFails;
-  until_ = lockSeconds(fails_) ? nowS + lockSeconds(fails_) : 0;   // conservative: full lock again after a reboot
+  const uint32_t seconds = lockSeconds(fails_);
+  locked_ = seconds != 0;
+  until_ = locked_ ? nowS + seconds : 0;   // conservative: full lock again after a reboot
 }
 LockGate PinLockout::begin(uint32_t nowS) {
   LockGate g = {true, 0};
-  if (until_ != 0 && (uint32_t)(until_ - nowS) < 0x80000000u && until_ != nowS) {   // still locked
-    g.allowed = false; g.retryAfterS = until_ - nowS;
-    return g;
+  if (locked_) {
+    const uint32_t remaining = until_ - nowS;
+    if (remaining != 0 && remaining < 0x80000000u) {
+      g.allowed = false;
+      g.retryAfterS = remaining;
+      return g;
+    }
+    locked_ = false;  // exact deadline or a time after it
   }
   if (fails_ < 65535) fails_++;
   return g;
 }
 void PinLockout::fail(uint32_t nowS) {
-  uint32_t s = lockSeconds(fails_);
-  if (s) until_ = nowS + s;
+  const uint32_t seconds = lockSeconds(fails_);
+  if (seconds) {
+    until_ = nowS + seconds;
+    locked_ = true;
+  }
 }
 
 // ---------------- TokenTable ----------------
 void TokenTable::revokeAll() { memset(s_, 0, sizeof s_); evicted_ = false; }
-bool TokenTable::issue(const uint8_t rnd[16], uint32_t nowS) {
+bool TokenTable::canIssue(const uint8_t rnd[16]) const {
+  if (rnd == nullptr) return false;
   uint8_t z = 0;
   for (int i = 0; i < 16; i++) z |= rnd[i];
-  evicted_ = false;
   if (z == 0) return false;
   for (int i = 0; i < 2; i++) if (s_[i].used && memcmp(s_[i].t, rnd, 16) == 0) return false;
+  return true;
+}
+bool TokenTable::issue(const uint8_t rnd[16], uint32_t nowS) {
+  evicted_ = false;
+  if (!canIssue(rnd)) return false;
   int slot = -1;
   for (int i = 0; i < 2 && slot < 0; i++) if (!live_(s_[i], nowS)) slot = i;
   if (slot < 0) {                                          // both live: displace the least recently used
@@ -109,6 +124,7 @@ bool TokenTable::issue(const uint8_t rnd[16], uint32_t nowS) {
   return true;
 }
 bool TokenTable::check(const uint8_t tok[16], uint32_t nowS) {
+  if (tok == nullptr) return false;
   int hit = -1;
   for (int i = 0; i < 2; i++) {
     uint8_t d = 0;
@@ -121,21 +137,24 @@ bool TokenTable::check(const uint8_t tok[16], uint32_t nowS) {
   return true;
 }
 void TokenTable::revoke(const uint8_t tok[16]) {
+  if (tok == nullptr) return;
   for (int i = 0; i < 2; i++) if (s_[i].used && ctEqual(s_[i].t, tok, 16)) memset(&s_[i], 0, sizeof s_[i]);
 }
 int TokenTable::active(uint32_t nowS) const { int n = 0; for (int i = 0; i < 2; i++) if (live_(s_[i], nowS)) n++; return n; }
 
 // ---------------- ReqRing ----------------
-uint32_t reqFingerprint(uint8_t op, uint32_t a, uint32_t b, const uint8_t* s, size_t n) {
+bool reqFingerprint(uint8_t op, uint32_t a, uint32_t b, const uint8_t* s, size_t n, uint32_t& outFingerprint) {
+  if (n != 0 && s == nullptr) return false;
   uint32_t h = 2166136261u;
   uint8_t hdr[9] = {op, (uint8_t)a, (uint8_t)(a >> 8), (uint8_t)(a >> 16), (uint8_t)(a >> 24),
                     (uint8_t)b, (uint8_t)(b >> 8), (uint8_t)(b >> 16), (uint8_t)(b >> 24)};
   for (int i = 0; i < 9; i++) { h ^= hdr[i]; h *= 16777619u; }
   for (size_t i = 0; i < n; i++) { h ^= s[i]; h *= 16777619u; }
-  return h;
+  outFingerprint = h;
+  return true;
 }
 ReqResult ReqRing::begin(uint32_t id, uint32_t fp, uint32_t nowS) {
-  ReqResult r = {RQ_INVALID, A_BAD, 0};
+  ReqResult r = {RQ_INVALID, A_BAD, 0, 0};
   if (id == 0) return r;
   for (int i = 0; i < 16; i++) if (e_[i].st && e_[i].id == id) {
     if (e_[i].fp != fp) { r.kind = RQ_MISMATCH; r.code = A_CONFLICT; return r; }
@@ -148,25 +167,37 @@ ReqResult ReqRing::begin(uint32_t id, uint32_t fp, uint32_t nowS) {
     for (int i = 0; i < 16; i++) if (e_[i].st == 2 && (slot < 0 || e_[i].order < e_[slot].order)) slot = i;
   }
   if (slot < 0) { r.kind = RQ_INFLIGHT; r.code = A_CONFLICT; return r; }
-  e_[slot].id = id; e_[slot].fp = fp; e_[slot].st = 1; e_[slot].t = nowS; e_[slot].order = ++seq_; e_[slot].code = 0; e_[slot].aux = 0;
-  r.kind = RQ_NEW; r.code = A_OK;
+  ++nextTicket_;
+  if (nextTicket_ == 0) ++nextTicket_;  // reserve zero for non-new results
+  e_[slot].id = id; e_[slot].fp = fp; e_[slot].st = 1; e_[slot].t = nowS; e_[slot].order = ++seq_;
+  e_[slot].ticket = nextTicket_; e_[slot].code = 0; e_[slot].aux = 0;
+  r.kind = RQ_NEW; r.code = A_OK; r.ticket = e_[slot].ticket;
   return r;
 }
-void ReqRing::finish(uint32_t id, ApiCode code, uint32_t aux) {
-  for (int i = 0; i < 16; i++) if (e_[i].st == 1 && e_[i].id == id) { e_[i].st = 2; e_[i].code = code; e_[i].aux = aux; e_[i].order = ++seq_; return; }
+bool ReqRing::finish(uint32_t id, uint64_t ticket, ApiCode code, uint32_t aux) {
+  // ReqRing caches successful commits only. Failed/uncertain operations must
+  // be aborted so a retry can execute the handler again.
+  if (ticket == 0 || code != A_OK) return false;
+  for (int i = 0; i < 16; i++) if (e_[i].st == 1 && e_[i].id == id && e_[i].ticket == ticket) {
+    e_[i].st = 2; e_[i].code = code; e_[i].aux = aux; e_[i].order = ++seq_; return true;
+  }
+  return false;
 }
 void ReqRing::expire(uint32_t nowS, uint32_t maxAgeS) {
-  for (int i = 0; i < 16; i++) if (e_[i].st == 1 && (uint32_t)(nowS - e_[i].t) > maxAgeS) e_[i].st = 0;
+  for (int i = 0; i < 16; i++) if (e_[i].st == 1 && (uint32_t)(nowS - e_[i].t) > maxAgeS) { e_[i].st = 0; e_[i].ticket = 0; }
 }
-void ReqRing::abort(uint32_t id) {
-  for (int i = 0; i < 16; i++) if (e_[i].st == 1 && e_[i].id == id) e_[i].st = 0;
+void ReqRing::abort(uint32_t id, uint64_t ticket) {
+  if (ticket == 0) return;
+  for (int i = 0; i < 16; i++) if (e_[i].st == 1 && e_[i].id == id && e_[i].ticket == ticket) { e_[i].st = 0; e_[i].ticket = 0; return; }
 }
 
 // ---------------- builders / gates ----------------
 ApiResult buildMark(const MarkReq& r, const ApiCtx& c, const RosterStore& roster, Event* out, size_t& cnt) {
   cnt = 0;
+  if (out == nullptr) return res(A_INVALID, R_BAD_FIELD);
   if (r.status > ST_EXCUSED) return res(A_INVALID, R_BAD_FIELD);
   if (r.id < 1 || r.id > c.cap || r.id > MAX_ID) return res(A_INVALID, R_BAD_FIELD);
+  if (!roster.historyComplete()) return res(A_LOCKED, R_STATE);
   if (!roster.known(r.id)) return res(A_NOTFOUND, R_UNKNOWN_ID);
   ApiResult d = dayChecks(r.day, c, false, r.session);
   if (d.code != A_OK) return d;
@@ -182,6 +213,7 @@ ApiResult buildMark(const MarkReq& r, const ApiCtx& c, const RosterStore& roster
 }
 ApiResult buildNoClass(const NoClassReq& r, const ApiCtx& c, Event* out, size_t& cnt) {
   cnt = 0;
+  if (out == nullptr) return res(A_INVALID, R_BAD_FIELD);
   ApiResult d = dayChecks(r.day, c, true, r.session);   // holidays are known in advance: future days allowed
   if (d.code != A_OK) return d;
   if (!r.wholeDay && !c.tt.day[weekdayIndex(r.day)][r.session].enabled) return res(A_INVALID, R_NO_SUCH_SESSION);
@@ -193,8 +225,9 @@ static ApiResult mapRoster(RosterErr e) {
   switch (e) {
     case RE_OK: case RE_NOOP: return res(A_OK);
     case RE_BAD_ID: return res(A_INVALID, R_BAD_FIELD);
-    case RE_BAD_NAME: return res(A_INVALID, R_BAD_FIELD);
+    case RE_BAD_NAME: case RE_BAD_OUTPUT: return res(A_INVALID, R_BAD_FIELD);
     case RE_UNKNOWN: return res(A_NOTFOUND, R_UNKNOWN_ID);
+    case RE_UNTRUSTED: return res(A_LOCKED, R_STATE);
     default: return res(A_CONFLICT, R_FULL);
   }
 }
@@ -209,6 +242,7 @@ ApiResult rosterActivate(const RosterStore& r, uint16_t id, uint32_t now, Event*
 }
 ApiResult gateEnroll(const RosterStore& r, uint16_t id, bool replace, uint16_t cap) {
   if (id < 1 || id > cap || id > MAX_ID) return res(A_INVALID, R_BAD_FIELD);
+  if (!r.historyComplete()) return res(A_LOCKED, R_STATE);
   if (!replace && r.known(id)) return res(A_CONFLICT, R_SLOT_TAKEN);   // enroll is not idempotent: never overwrite silently
   if (replace && !r.known(id)) return res(A_NOTFOUND, R_UNKNOWN_ID);
   return res(A_OK);
@@ -247,6 +281,8 @@ bool weakPin(const char* s, size_t n) {
   return same || up || down;
 }
 bool ctEqual(const uint8_t* a, const uint8_t* b, size_t n) {
+  if (n == 0) return true;
+  if (a == nullptr || b == nullptr) return false;
   uint8_t d = 0;
   for (size_t i = 0; i < n; i++) d |= (uint8_t)(a[i] ^ b[i]);
   return d == 0;

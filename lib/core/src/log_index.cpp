@@ -3,10 +3,33 @@ namespace att {
 void LogIndex::reset_() { nGaps_ = 0; nCloses_ = 0; gapOverflow_ = false; closeOverflow_ = false; }
 void LogIndex::onRecord(const Event& e) {
   if (e.type == EV_GAP) {
-    if (nGaps_ < MAX_GAPS) {
-      gaps_[nGaps_].from = e.epoch;
-      gaps_[nGaps_].to = e.epoch + (uint32_t)e.b * 60u;
-      nGaps_++;
+    const uint64_t end64 = (uint64_t)e.epoch + (uint64_t)e.b * 60u;
+    if (e.b == 0 || end64 > UINT32_MAX) {
+      gapOverflow_ = true;                 // malformed span: never let wraparound hide a coverage gap
+      return;
+    }
+    uint32_t from = e.epoch;
+    uint32_t to = (uint32_t)end64;
+    // This index answers only interval-overlap questions. Keep a sorted union
+    // of half-open spans so retries/chunks that overlap or touch use one slot.
+    size_t first = 0;
+    while (first < nGaps_ && gaps_[first].to < from) ++first;
+    size_t last = first;
+    while (last < nGaps_ && gaps_[last].from <= to) {
+      if (gaps_[last].from < from) from = gaps_[last].from;
+      if (gaps_[last].to > to) to = gaps_[last].to;
+      ++last;
+    }
+    if (last > first) {
+      // Replace the first match with the expanded union and remove any other matches.
+      gaps_[first] = Span{from, to};
+      const size_t removed = last - first - 1;
+      for (size_t i = last; i < nGaps_; ++i) gaps_[i - removed] = gaps_[i];
+      nGaps_ -= removed;
+    } else if (nGaps_ < MAX_GAPS) {
+      for (size_t i = nGaps_; i > first; --i) gaps_[i] = gaps_[i - 1];
+      gaps_[first] = Span{from, to};
+      ++nGaps_;
     } else {
       gapOverflow_ = true;
     }

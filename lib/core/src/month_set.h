@@ -8,7 +8,8 @@ class MonthSet : public IStorage {
  public:
   explicit MonthSet(IFileSet& f) : f_(f), month_(0), refused_((size_t)-1) {}
   void setMonth(uint32_t key) { month_ = key; }     // caller sets from the RTC before appending
-  size_t size() override;
+  bool usesFileSet(const IFileSet& files) const { return &f_ == &files; }
+  bool sizeChecked(size_t& out) override;
   bool read(size_t off, uint8_t* buf, size_t n) override;
   bool append(const uint8_t* buf, size_t n) override;
   bool truncate(size_t n) override;                 // only within the last non-empty file

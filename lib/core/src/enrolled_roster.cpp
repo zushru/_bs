@@ -23,8 +23,8 @@ void Occupancy::addIndexPage(uint8_t page, const uint8_t b[32], uint16_t capacit
       }
 }
 Reconcile reconcile(const RosterStore& r, const Occupancy& o) {
-  Reconcile x = {o.valid, 0, 0, 0, 0, 0};
-  if (!o.valid) { return x; }
+  Reconcile x = {o.valid && r.historyComplete(), 0, 0, 0, 0, 0};
+  if (!x.valid) { return x; }
   for (uint16_t id = 1; id <= MAX_ID; id++) {
     bool occ = o.has(id);
     if (r.active(id)) {
@@ -38,11 +38,13 @@ Reconcile reconcile(const RosterStore& r, const Occupancy& o) {
   return x;
 }
 uint16_t nextToEnroll(const RosterStore& r, const Occupancy& o, uint16_t after) {
+  if (!o.valid || !r.historyComplete()) return 0;
   for (uint16_t id = (uint16_t)(after + 1); id >= 1 && id <= MAX_ID; id++)
     if (r.active(id) && !o.has(id)) return id;
   return 0;
 }
 uint16_t firstFreeSlot(const RosterStore& r, const Occupancy& o, uint16_t capacity) {
+  if (!o.valid || !r.historyComplete()) return 0;
   for (uint16_t id = 1; id <= capacity && id <= MAX_ID; id++)
     if (!r.known(id) && !o.has(id)) return id;       // IDs are never reused: known (even inactive) means taken
   return 0;

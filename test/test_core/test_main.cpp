@@ -135,21 +135,21 @@ void test_minute_of_day() {
 static uint32_t at(uint32_t dayStart, int minute, int sec = 0) { return dayStart + (uint32_t)minute * 60 + (uint32_t)sec; }
 void test_session_windows() {
   Timetable t = defaultTimetable();
-  Params p = {0, 10, 15};
-  TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 464, 59)));
-  TEST_ASSERT_EQUAL_INT(0, sessionAt(t, p, at(FRI_2026_10_30, 465)));
+  Params p = {0, 10, 30};
+  TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 449, 59)));
+  TEST_ASSERT_EQUAL_INT(0, sessionAt(t, p, at(FRI_2026_10_30, 450)));
   TEST_ASSERT_EQUAL_INT(0, sessionAt(t, p, at(FRI_2026_10_30, 749, 59)));
   TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 750)));
-  TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 794, 59)));
-  TEST_ASSERT_EQUAL_INT(1, sessionAt(t, p, at(FRI_2026_10_30, 795)));
+  TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 779, 59)));
+  TEST_ASSERT_EQUAL_INT(1, sessionAt(t, p, at(FRI_2026_10_30, 780)));
   TEST_ASSERT_EQUAL_INT(1, sessionAt(t, p, at(FRI_2026_10_30, 989, 59)));
   TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 990)));
 }
 void test_weekend_and_offset_and_disabled() {
   Timetable t = defaultTimetable();
-  Params p = {0, 10, 15};
+  Params p = {0, 10, 30};
   TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30 + 86400, 600)));       // Saturday
-  Params p8 = {480, 10, 15};
+  Params p8 = {480, 10, 30};
   TEST_ASSERT_EQUAL_INT(0, sessionAt(t, p8, at(FRI_2026_10_30, 0)));   // 08:00 local = 00:00 UTC
   t.day[4][1].enabled = false;
   TEST_ASSERT_EQUAL_INT(-1, sessionAt(t, p, at(FRI_2026_10_30, 900)));               // Friday PM disabled

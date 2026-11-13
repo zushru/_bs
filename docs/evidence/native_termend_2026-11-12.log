@@ -1,0 +1,249 @@
+Verbosity level can be increased via `-v, -vv, or -vvv` option
+Collected 40 tests
+
+Processing test_api in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_api/test_main.cpp:833: test_authorize_matches_oracle_everywhere	[PASSED]
+test/test_api/test_main.cpp:834: test_unauthenticated_learns_nothing	[PASSED]
+test/test_api/test_main.cpp:835: test_lockout_schedule_and_cap	[PASSED]
+test/test_api/test_main.cpp:836: test_lockout_success_resets_and_refusals_do_not_count	[PASSED]
+test/test_api/test_main.cpp:837: test_lockout_counter_is_persisted_before_verify	[PASSED]
+test/test_api/test_main.cpp:838: test_lockout_boot_restore_and_saturation	[PASSED]
+test/test_api/test_main.cpp:839: test_lockout_deadline_wrapping_to_zero_does_not_skip_lockout	[PASSED]
+test/test_api/test_main.cpp:840: test_token_basics_and_expiry_boundary	[PASSED]
+test/test_api/test_main.cpp:841: test_token_rejects_wrong_zero_and_neighbours	[PASSED]
+test/test_api/test_main.cpp:842: test_token_can_issue_rejects_zero_and_duplicate_without_mutation	[PASSED]
+test/test_api/test_main.cpp:843: test_token_can_issue_accepts_distinct_token_without_mutating_lru	[PASSED]
+test/test_api/test_main.cpp:844: test_token_two_sessions_and_lru_eviction	[PASSED]
+test/test_api/test_main.cpp:845: test_reqring_replay_mismatch_inflight	[PASSED]
+test/test_api/test_main.cpp:846: test_reqring_evicted_pending_ticket_cannot_finish_or_abort_reused_id	[PASSED]
+test/test_api/test_main.cpp:847: test_reqring_does_not_cache_failed_results	[PASSED]
+test/test_api/test_main.cpp:848: test_reqring_eviction_and_leak_guard	[PASSED]
+test/test_api/test_main.cpp:849: test_mark_valid_and_event_shape	[PASSED]
+test/test_api/test_main.cpp:850: test_mark_rejections	[PASSED]
+test/test_api/test_main.cpp:851: test_term_end_is_inclusive_for_api_mutations	[PASSED]
+test/test_api/test_main.cpp:852: test_mark_today_window_rule	[PASSED]
+test/test_api/test_main.cpp:853: test_noclass_rules_and_shape	[PASSED]
+test/test_api/test_main.cpp:854: test_roster_mapping_and_idempotency	[PASSED]
+test/test_api/test_main.cpp:855: test_roster_and_manual_mark_gates_fail_closed_on_incomplete_history	[PASSED]
+test/test_api/test_main.cpp:856: test_enroll_gate	[PASSED]
+test/test_api/test_main.cpp:857: test_config_gate_order_and_rules	[PASSED]
+test/test_api/test_main.cpp:858: test_restore_gate_and_helpers	[PASSED]
+test/test_api/test_main.cpp:859: test_window_open_now	[PASSED]
+test/test_api/test_main.cpp:860: test_pin_auth_boot_fails_closed_when_counter_unreadable	[PASSED]
+test/test_api/test_main.cpp:861: test_pin_auth_persists_attempt_and_reset_before_action	[PASSED]
+test/test_api/test_main.cpp:862: test_pin_auth_bad_secret_is_persisted_and_action_never_runs	[PASSED]
+test/test_api/test_main.cpp:863: test_pin_auth_lockout_and_reboot_restore	[PASSED]
+test/test_api/test_main.cpp:864: test_pin_auth_attempt_persist_failure_latches_before_verify	[PASSED]
+test/test_api/test_main.cpp:865: test_pin_auth_reset_persist_failure_blocks_action	[PASSED]
+test/test_api/test_main.cpp:866: test_pin_auth_verifier_error_latches_and_preserves_attempt	[PASSED]
+test/test_api/test_main.cpp:867: test_pin_auth_invalid_pin_does_not_consume_attempt	[PASSED]
+test/test_api/test_main.cpp:868: test_pin_auth_indeterminate_action_latches	[PASSED]
+test/test_api/test_main.cpp:869: test_pin_change_requires_old_pin_and_commits_after_reset	[PASSED]
+test/test_api/test_main.cpp:870: test_pin_change_rejects_weak_new_pin_before_old_pin_attempt	[PASSED]
+test/test_api/test_main.cpp:871: test_pin_change_wrong_old_pin_never_writes_new_pin	[PASSED]
+test/test_api/test_main.cpp:872: test_pin_change_indeterminate_write_latches	[PASSED]
+test/test_api/test_main.cpp:873: test_token_null_inputs_are_rejected_without_session_mutation	[PASSED]
+test/test_api/test_main.cpp:874: test_api_pointer_inputs_fail_closed_without_mutation	[PASSED]
+------------------ native:test_api [PASSED] Took 6.95 seconds ------------------
+
+Processing test_as608_pipeline in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_as608_pipeline/test_main.cpp:824: test_owner_config_runtime_gates_until_ready_blocks_active_scan_and_updates_schedule	[PASSED]
+test/test_as608_pipeline/test_main.cpp:825: test_owner_config_runtime_rejects_unbound_closure	[PASSED]
+test/test_as608_pipeline/test_main.cpp:826: test_attendance_owner_remains_closed_after_startup_authentication_fault	[PASSED]
+test/test_as608_pipeline/test_main.cpp:827: test_attendance_owner_hides_raw_sensor_and_commits_only_through_pipeline	[PASSED]
+test/test_as608_pipeline/test_main.cpp:828: test_application_gate_rechecks_clock_health_before_match_commit	[PASSED]
+test/test_as608_pipeline/test_main.cpp:829: test_application_gate_rejects_incomplete_boot_or_mismatched_owner_graph	[PASSED]
+test/test_as608_pipeline/test_main.cpp:830: test_match_is_resolved_checked_and_committed_once	[PASSED]
+test/test_as608_pipeline/test_main.cpp:831: test_configured_term_end_day_is_inclusive_for_scans	[PASSED]
+test/test_as608_pipeline/test_main.cpp:832: test_late_match_is_committed_as_late	[PASSED]
+test/test_as608_pipeline/test_main.cpp:833: test_duplicate_scan_does_not_append_a_second_attendance_event	[PASSED]
+test/test_as608_pipeline/test_main.cpp:834: test_unresolved_page_mapping_fails_without_creating_a_scan	[PASSED]
+test/test_as608_pipeline/test_main.cpp:835: test_log_write_failure_reports_uncertain_commit	[PASSED]
+test/test_as608_pipeline/test_main.cpp:836: test_complete_attendance_write_reported_failed_is_not_duplicated_after_reopen	[PASSED]
+test/test_as608_pipeline/test_main.cpp:837: test_pipeline_fails_closed_when_roster_history_is_incomplete	[PASSED]
+test/test_as608_pipeline/test_main.cpp:838: test_pipeline_refuses_scan_when_occupancy_is_not_valid	[PASSED]
+test/test_as608_pipeline/test_main.cpp:839: test_pipeline_rechecks_occupancy_before_committing_a_match	[PASSED]
+test/test_as608_pipeline/test_main.cpp:840: test_no_finger_result_is_propagated_and_sensor_lease_released	[PASSED]
+------------ native:test_as608_pipeline [PASSED] Took 9.43 seconds ------------
+
+Processing test_roster in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_roster/test_main.cpp:381: test_valid_names	[PASSED]
+test/test_roster/test_main.cpp:382: test_set_and_expected	[PASSED]
+test/test_roster/test_main.cpp:383: test_rename_and_noop	[PASSED]
+test/test_roster/test_main.cpp:384: test_deactivate_and_reactivate	[PASSED]
+test/test_roster/test_main.cpp:385: test_plan_errors	[PASSED]
+test/test_roster/test_main.cpp:386: test_name_packing	[PASSED]
+test/test_roster/test_main.cpp:387: test_replay_matches_live	[PASSED]
+test/test_roster/test_main.cpp:388: test_incomplete_group_is_ignored	[PASSED]
+test/test_roster/test_main.cpp:389: test_set_and_rename_retry_after_complete_append_failure_and_replay	[PASSED]
+test/test_roster/test_main.cpp:390: test_activate_and_deactivate_retry_after_complete_append_failure_and_replay	[PASSED]
+test/test_roster/test_main.cpp:391: test_pending_set_group_is_not_trusted_before_parser_resolves_it	[PASSED]
+test/test_roster/test_main.cpp:392: test_incomplete_history_blocks_expected_reconcile_and_enrollment_helpers	[PASSED]
+test/test_roster/test_main.cpp:393: test_closure_refuses_to_close_when_roster_history_is_incomplete	[PASSED]
+test/test_roster/test_main.cpp:394: test_null_output_buffers_are_rejected_without_mutation	[PASSED]
+test/test_roster/test_main.cpp:395: test_interval_overflow_fails_closed	[PASSED]
+---------------- native:test_roster [PASSED] Took 7.12 seconds ----------------
+
+Processing test_coreb in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_coreb/test_main.cpp:733: test_log_group_append_and_reopen	[PASSED]
+test/test_coreb/test_main.cpp:734: test_log_append_failure_latches	[PASSED]
+test/test_coreb/test_main.cpp:735: test_log_torn_partial_record_is_preserved_and_blocks_open	[PASSED]
+test/test_coreb/test_main.cpp:736: test_log_torn_group_is_preserved_and_blocks_open	[PASSED]
+test/test_coreb/test_main.cpp:737: test_log_mid_corruption_detected	[PASSED]
+test/test_coreb/test_main.cpp:738: test_log_bad_tail_record_is_preserved_and_blocks_open	[PASSED]
+test/test_coreb/test_main.cpp:739: test_log_partial_tail_is_preserved_without_attempting_truncate	[PASSED]
+test/test_coreb/test_main.cpp:740: test_log_baseline_epoch	[PASSED]
+test/test_coreb/test_main.cpp:741: test_log_group_limits_and_unopened	[PASSED]
+test/test_coreb/test_main.cpp:742: test_dayview_scan_mark_precedence	[PASSED]
+test/test_coreb/test_main.cpp:743: test_dayview_noclass_toggle	[PASSED]
+test/test_coreb/test_main.cpp:744: test_dayview_close_bitmap_300	[PASSED]
+test/test_coreb/test_main.cpp:745: test_dayview_ignores_other_day_and_session	[PASSED]
+test/test_coreb/test_main.cpp:746: test_close_normal_day_coverage_yes	[PASSED]
+test/test_coreb/test_main.cpp:747: test_close_waits_for_session_end	[PASSED]
+test/test_coreb/test_main.cpp:748: test_boot_midwindow_makes_session_unverified	[PASSED]
+test/test_coreb/test_main.cpp:749: test_boot_before_window_keeps_coverage	[PASSED]
+test/test_coreb/test_main.cpp:750: test_short_unhealthy_span_in_window	[PASSED]
+test/test_coreb/test_main.cpp:751: test_outage_between_sessions_keeps_coverage	[PASSED]
+test/test_coreb/test_main.cpp:752: test_overdue_closure_after_downtime	[PASSED]
+test/test_coreb/test_main.cpp:753: test_closure_waits_while_unhealthy_then_recovers	[PASSED]
+test/test_coreb/test_main.cpp:754: test_storage_failure_during_closure	[PASSED]
+test/test_coreb/test_main.cpp:755: test_failed_boot_gap_is_retried	[PASSED]
+test/test_coreb/test_main.cpp:756: test_engine_set_schedule_updates_window_and_session_end	[PASSED]
+test/test_coreb/test_main.cpp:757: test_engine_set_schedule_updates_utc_offset	[PASSED]
+test/test_coreb/test_main.cpp:758: test_engine_set_schedule_updates_term_start	[PASSED]
+test/test_coreb/test_main.cpp:759: test_term_end_is_inclusive_and_closure_stops_after_it	[PASSED]
+test/test_coreb/test_main.cpp:760: test_term_end_clips_outage_gap_to_last_configured_day	[PASSED]
+test/test_coreb/test_main.cpp:761: test_engine_set_schedule_updates_term_end	[PASSED]
+test/test_coreb/test_main.cpp:762: test_no_close_for_weekend_or_before_term	[PASSED]
+test/test_coreb/test_main.cpp:763: test_long_gap_is_chunked_and_marks_old_sessions	[PASSED]
+test/test_coreb/test_main.cpp:764: test_tick_only_in_window_and_every_300s	[PASSED]
+test/test_coreb/test_main.cpp:765: test_close_snapshots_roster	[PASSED]
+test/test_coreb/test_main.cpp:766: test_health_priority_and_perms	[PASSED]
+test/test_coreb/test_main.cpp:767: test_health_faults_latch_until_reverified	[PASSED]
+test/test_coreb/test_main.cpp:768: test_health_unprovisioned_and_sensor_do_not_latch	[PASSED]
+test/test_coreb/test_main.cpp:769: test_clock_small_delta_is_info_only	[PASSED]
+test/test_coreb/test_main.cpp:770: test_clock_auto_sync_rules	[PASSED]
+test/test_coreb/test_main.cpp:771: test_clock_explicit_rules	[PASSED]
+test/test_coreb/test_main.cpp:772: test_clock_fault_uses_log_reference	[PASSED]
+test/test_coreb/test_main.cpp:773: test_clock_apply_writes_one_group	[PASSED]
+test/test_coreb/test_main.cpp:774: test_clock_apply_rejects_unapproved_or_invalid_decisions_without_writing	[PASSED]
+test/test_coreb/test_main.cpp:775: test_clock_apply_rejects_unrepresentable_epoch_tail_before_any_write	[PASSED]
+test/test_coreb/test_main.cpp:776: test_clock_apply_distinguishes_faulted_log_from_attempted_commit	[PASSED]
+test/test_coreb/test_main.cpp:777: test_clock_apply_complete_write_then_false_is_uncertain_and_replayed	[PASSED]
+test/test_coreb/test_main.cpp:778: test_clock_apply_late_group_failure_leaves_gap_prefix_but_no_clock_pair	[PASSED]
+test/test_coreb/test_main.cpp:779: test_near_scan_window	[PASSED]
+----------------- native:test_coreb [PASSED] Took 6.33 seconds -----------------
+
+Processing test_enroll in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_enroll/test_main.cpp:719: test_id_page_mapping_boundaries	[PASSED]
+test/test_enroll/test_main.cpp:720: test_occupancy_basics_and_bounds	[PASSED]
+test/test_enroll/test_main.cpp:721: test_index_page_decoding	[PASSED]
+test/test_enroll/test_main.cpp:722: test_expected_requires_template_and_valid_read	[PASSED]
+test/test_enroll/test_main.cpp:723: test_reconcile_counts	[PASSED]
+test/test_enroll/test_main.cpp:724: test_queue_and_slot_allocation_helpers_refuse_invalid_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:725: test_queue_and_slot_allocation	[PASSED]
+test/test_enroll/test_main.cpp:726: test_close_snapshot_excludes_unenrolled	[PASSED]
+test/test_enroll/test_main.cpp:727: test_fsm_begin_requires_valid_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:728: test_fsm_queue_is_active_roster_minus_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:729: test_fsm_rejects_active_student_above_sensor_capacity	[PASSED]
+test/test_enroll/test_main.cpp:730: test_fsm_enforces_45_active_student_limit	[PASSED]
+test/test_enroll/test_main.cpp:731: test_fsm_empty_queue_finishes_immediately	[PASSED]
+test/test_enroll/test_main.cpp:732: test_fsm_duplicate_blocks_store_and_reports_existing_id	[PASSED]
+test/test_enroll/test_main.cpp:733: test_fsm_can_skip_duplicate_and_continue_queue	[PASSED]
+test/test_enroll/test_main.cpp:734: test_fsm_stores_at_id_minus_one_and_advances_after_release	[PASSED]
+test/test_enroll/test_main.cpp:735: test_fsm_waits_for_first_finger_removal_before_second_sample	[PASSED]
+test/test_enroll/test_main.cpp:736: test_fsm_verify_toggle_off_skips_post_store_scan	[PASSED]
+test/test_enroll/test_main.cpp:737: test_fsm_verify_toggle_on_requires_remove_then_matching_scan	[PASSED]
+test/test_enroll/test_main.cpp:738: test_fsm_verify_failure_is_visible_and_can_continue_without_deleting	[PASSED]
+test/test_enroll/test_main.cpp:739: test_fsm_no_finger_is_wait_not_an_error	[PASSED]
+test/test_enroll/test_main.cpp:740: test_fsm_pauses_after_three_transient_errors_and_can_retry	[PASSED]
+test/test_enroll/test_main.cpp:741: test_fsm_model_mismatch_restarts_first_finger_pair	[PASSED]
+test/test_enroll/test_main.cpp:742: test_fsm_rechecks_occupancy_before_store	[PASSED]
+test/test_enroll/test_main.cpp:743: test_fsm_begin_rejects_incomplete_roster_history	[PASSED]
+test/test_enroll/test_main.cpp:744: test_fsm_rechecks_roster_history_before_store	[PASSED]
+test/test_enroll/test_main.cpp:745: test_fsm_rechecks_roster_before_store	[PASSED]
+test/test_enroll/test_main.cpp:746: test_fsm_invalid_occupancy_before_store_blocks_write	[PASSED]
+test/test_enroll/test_main.cpp:747: test_fsm_ambiguous_store_invalidates_and_refresh_detects_success	[PASSED]
+test/test_enroll/test_main.cpp:748: test_fsm_occupancy_refresh_cannot_resume_with_incomplete_roster_history	[PASSED]
+test/test_enroll/test_main.cpp:749: test_fsm_ambiguous_store_refresh_without_target_requeues_student	[PASSED]
+test/test_enroll/test_main.cpp:750: test_fsm_skip_is_blocked_while_sensor_command_is_pending	[PASSED]
+test/test_enroll/test_main.cpp:751: test_fsm_cancel_waits_for_confirmed_finger_removal	[PASSED]
+test/test_enroll/test_main.cpp:752: test_fsm_cancel_drains_inflight_command_before_release_fence	[PASSED]
+test/test_enroll/test_main.cpp:753: test_fsm_cancel_sensor_fault_keeps_ownership_until_retry_and_release	[PASSED]
+test/test_enroll/test_main.cpp:754: test_fsm_pending_sensor_results_do_not_advance_or_consume_retries	[PASSED]
+test/test_enroll/test_main.cpp:755: test_fsm_cancel_during_pending_store_applies_positive_ack	[PASSED]
+test/test_enroll/test_main.cpp:756: test_fsm_cancel_during_ambiguous_store_invalidates_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:757: test_fsm_pending_store_does_not_invalidate_occupancy_or_repeat_write	[PASSED]
+test/test_enroll/test_main.cpp:758: test_fsm_occupancy_refresh_does_not_requeue_prior_skips	[PASSED]
+---------------- native:test_enroll [PASSED] Took 6.82 seconds ----------------
+
+Processing test_coreb2 in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_coreb2/test_main.cpp:393: test_index_and_cache_match_replay_random	[PASSED]
+test/test_coreb2/test_main.cpp:394: test_reopen_after_tail_loss_rebuilds_everything	[PASSED]
+test/test_coreb2/test_main.cpp:395: test_attach_replays_existing_records	[PASSED]
+test/test_coreb2/test_main.cpp:396: test_observer_limit	[PASSED]
+test/test_coreb2/test_main.cpp:397: test_engine_refuses_without_index	[PASSED]
+test/test_coreb2/test_main.cpp:398: test_nightly_boots_write_no_gaps	[PASSED]
+test/test_coreb2/test_main.cpp:399: test_boot_inside_window_clips_gap	[PASSED]
+test/test_coreb2/test_main.cpp:400: test_retry_of_complete_gap_append_does_not_consume_index_capacity	[PASSED]
+test/test_coreb2/test_main.cpp:401: test_gap_index_coalesces_overlapping_and_adjacent_spans	[PASSED]
+test/test_coreb2/test_main.cpp:402: test_gap_index_rejects_malformed_epoch_spans	[PASSED]
+test/test_coreb2/test_main.cpp:403: test_make_gap_events_handles_full_epoch_span_without_unsigned_wrap	[PASSED]
+test/test_coreb2/test_main.cpp:404: test_append_gaps_rejects_unrepresentable_epoch_tail_before_any_write	[PASSED]
+test/test_coreb2/test_main.cpp:405: test_make_gap_events_near_epoch_ceiling_never_emits_wrapped_or_zero_span	[PASSED]
+test/test_coreb2/test_main.cpp:406: test_gap_overflow_flag	[PASSED]
+test/test_coreb2/test_main.cpp:407: test_engine_gap_overflow_is_unverified	[PASSED]
+test/test_coreb2/test_main.cpp:408: test_close_overflow_refuses_more_closes	[PASSED]
+test/test_coreb2/test_main.cpp:409: test_first_close_wins_in_index_and_cache	[PASSED]
+---------------- native:test_coreb2 [PASSED] Took 7.91 seconds ----------------
+
+Processing test_config in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_config/test_main.cpp:231: test_default_scan_window_is_thirty_minutes	[PASSED]
+test/test_config/test_main.cpp:232: test_legacy_fifteen_minute_scan_lead_is_normalized	[PASSED]
+test/test_config/test_main.cpp:233: test_same_generation_slots_with_different_legacy_leads_still_fault	[PASSED]
+test/test_config/test_main.cpp:234: test_roundtrip_and_layout	[PASSED]
+test/test_config/test_main.cpp:235: test_both_blank_is_unprovisioned	[PASSED]
+test/test_config/test_main.cpp:236: test_bit_flip_falls_back_to_other_slot	[PASSED]
+test/test_config/test_main.cpp:237: test_torn_write_keeps_old_slot	[PASSED]
+test/test_config/test_main.cpp:238: test_higher_seq_wins_any_order	[PASSED]
+test/test_config/test_main.cpp:239: test_equal_seq_different_payload_is_fault	[PASSED]
+test/test_config/test_main.cpp:240: test_both_invalid_is_fault_and_out_untouched	[PASSED]
+test/test_config/test_main.cpp:241: test_bad_version_and_bad_magic	[PASSED]
+test/test_config/test_main.cpp:242: test_validate_rejects_each_rule	[PASSED]
+test/test_config/test_main.cpp:243: test_encode_refuses_invalid	[PASSED]
+test/test_config/test_main.cpp:244: test_can_apply_matrix	[PASSED]
+test/test_config/test_main.cpp:245: test_config_equal_detects_each_field	[PASSED]
+---------------- native:test_config [PASSED] Took 4.72 seconds ----------------
+
+=================================== SUMMARY ===================================
+Environment    Test                 Status    Duration
+-------------  -------------------  --------  ------------
+native         test_api             PASSED    00:00:06.946
+native         test_as608_pipeline  PASSED    00:00:09.434
+native         test_roster          PASSED    00:00:07.117
+native         test_coreb           PASSED    00:00:06.327
+native         test_enroll          PASSED    00:00:06.823
+native         test_coreb2          PASSED    00:00:07.910
+native         test_config          PASSED    00:00:04.722
+================ 193 test cases: 193 succeeded in 00:00:49.279 ================

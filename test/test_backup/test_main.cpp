@@ -47,7 +47,7 @@ struct Buf : IByteSink {
 };
 struct MemStore : IStorage {
   std::vector<uint8_t> d;
-  size_t size() override { return d.size(); }
+  bool sizeChecked(size_t& out) override { out = d.size(); return true; }
   bool read(size_t o, uint8_t* b, size_t n) override { if (o + n > d.size()) return false; memcpy(b, d.data() + o, n); return true; }
   bool append(const uint8_t* b, size_t n) override { d.insert(d.end(), b, b + n); return true; }
   bool truncate(size_t n) override { d.resize(n); return true; }

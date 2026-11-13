@@ -29,21 +29,30 @@ ClockDecision decideClock(const ClockCtx& c) {
 bool nearScanWindow(const Timetable& t, const Params& p, uint32_t epoch, uint32_t marginS) {
   return sessionAt(t, p, epoch) >= 0 || sessionAt(t, p, epoch + marginS) >= 0;
 }
-bool applyClockSet(LogStore& log, const ClockDecision& d, uint32_t oldEpoch, uint32_t newEpoch) {
+ClockApplyResult applyClockSet(LogStore& log, const ClockDecision& d,
+                               uint32_t oldEpoch, uint32_t newEpoch) {
+  if (d.action != CA_APPLY || d.source > SRC_WIZARD ||
+      !gapSpanEncodable(d.gapFrom, d.gapTo))
+    return CLOCK_APPLY_REJECTED;
+  if (log.faulted()) return CLOCK_APPLY_LOG_FAULTED;
+
   Event ev[MAX_GROUP];
   size_t n = 0;
   uint32_t cur = d.gapFrom;
+  bool wroteGapPrefix = false;
   while (d.gapTo > cur) {                                // earlier groups carry the head of a very long span
     uint32_t next = cur;
     n = makeGapEvents(cur, d.gapTo, GAP_CLOCK, ev, MAX_GROUP - 2, &next);
-    if (n == 0 || next <= cur) return false;
+    if (n == 0 || next <= cur)
+      return wroteGapPrefix ? CLOCK_APPLY_COMMIT_UNCERTAIN : CLOCK_APPLY_REJECTED;
     if (next >= d.gapTo) break;                          // last chunks ride with the CLOCK_SET pair
-    if (!log.append(ev, n)) return false;
+    if (!log.append(ev, n)) return CLOCK_APPLY_COMMIT_UNCERTAIN;
+    wroteGapPrefix = true;
     cur = next;
     n = 0;
   }
   ev[n++] = Event{EV_CLOCK_SET, 0, d.source, oldEpoch, 0, 0};
   ev[n++] = Event{EV_CLOCK_SET, 0, d.source, newEpoch, 0, 0};
-  return log.append(ev, n);
+  return log.append(ev, n) ? CLOCK_APPLY_COMMITTED : CLOCK_APPLY_COMMIT_UNCERTAIN;
 }
 }

@@ -36,15 +36,15 @@ ApiResult authorize(Ep ep, HState h, bool tokenValid, bool setupCodeOk);
 struct LockGate { bool allowed; uint32_t retryAfterS; };
 class PinLockout {
  public:
-  PinLockout() : fails_(0), until_(0) {}
+  PinLockout() : fails_(0), until_(0), locked_(false) {}
   void boot(uint16_t persistedFails, uint32_t nowS);   // multiple of 5 => locked again for its full duration
   LockGate begin(uint32_t nowS);
   void fail(uint32_t nowS);
-  void success() { fails_ = 0; until_ = 0; }
+  void success() { fails_ = 0; until_ = 0; locked_ = false; }
   uint16_t fails() const { return fails_; }
   static uint32_t lockSeconds(uint16_t fails);         // 0 unless fails is a positive multiple of 5
  private:
-  uint16_t fails_; uint32_t until_;
+  uint16_t fails_; uint32_t until_; bool locked_;
 };
 
 // ---- Sessions: 128-bit random tokens, RAM only, 15 min idle expiry, max 2.
@@ -52,10 +52,11 @@ const uint32_t TOKEN_IDLE_S = 900;
 class TokenTable {
  public:
   TokenTable() { revokeAll(); }
+  bool canIssue(const uint8_t rnd[16]) const;           // read-only preflight; no slot or LRU mutation
   bool issue(const uint8_t rnd[16], uint32_t nowS);    // false: all-zero (RNG failure) or duplicate token
   bool lastIssueEvicted() const { return evicted_; }   // a live session was displaced (least recently used)
-  bool check(const uint8_t tok[16], uint32_t nowS);    // constant-time; refreshes the idle timer on success
-  void revoke(const uint8_t tok[16]);
+  bool check(const uint8_t tok[16], uint32_t nowS);    // false for null; constant-time compare otherwise; refreshes idle timer on success
+  void revoke(const uint8_t tok[16]);                 // null is a no-op
   void revokeAll();
   int active(uint32_t nowS) const;
  private:
@@ -66,18 +67,18 @@ class TokenTable {
 
 // ---- Idempotency for roster/enroll: 16-entry ring keyed by client req_id + request fingerprint.
 enum ReqKind { RQ_NEW, RQ_REPLAY, RQ_MISMATCH, RQ_INFLIGHT, RQ_INVALID };
-struct ReqResult { ReqKind kind; ApiCode code; uint32_t aux; };
-uint32_t reqFingerprint(uint8_t op, uint32_t a, uint32_t b, const uint8_t* s, size_t n);
+struct ReqResult { ReqKind kind; ApiCode code; uint32_t aux; uint64_t ticket; };
+bool reqFingerprint(uint8_t op, uint32_t a, uint32_t b, const uint8_t* s, size_t n, uint32_t& outFingerprint); // false for null/nonzero input; output unchanged
 class ReqRing {
  public:
-  ReqRing() { for (int i = 0; i < 16; i++) e_[i].st = 0; seq_ = 0; }
-  ReqResult begin(uint32_t reqId, uint32_t fp, uint32_t nowS);   // reserves the id as pending when new
+  ReqRing() { for (int i = 0; i < 16; i++) { e_[i].st = 0; e_[i].ticket = 0; } seq_ = 0; nextTicket_ = 0; }
+  ReqResult begin(uint32_t reqId, uint32_t fp, uint32_t nowS);   // reserves the id as pending when new; ticket identifies this reservation
   void expire(uint32_t nowS, uint32_t maxAgeS);          // frees pending entries whose handler never finished (leak guard)
-  void finish(uint32_t reqId, ApiCode code, uint32_t aux);   // success only: failures must abort() so a retry re-runs
-  void abort(uint32_t reqId);
+  bool finish(uint32_t reqId, uint64_t ticket, ApiCode code, uint32_t aux); // only A_OK may be cached; false leaves the reservation pending
+  void abort(uint32_t reqId, uint64_t ticket);           // only the matching live reservation can abort
  private:
-  struct E { uint32_t id, fp, aux, order, t; uint16_t code; uint8_t st; };   // st 0 free, 1 pending, 2 done
-  E e_[16]; uint32_t seq_;
+  struct E { uint32_t id, fp, aux, order, t; uint64_t ticket; uint16_t code; uint8_t st; }; // st 0 free, 1 pending, 2 done
+  E e_[16]; uint32_t seq_; uint64_t nextTicket_;
 };
 
 // ---- Request validation. Each returns A_OK and fills events, or an error and leaves cnt = 0.
@@ -97,5 +98,5 @@ bool windowOpenNow(const Timetable& t, const Params& p, uint32_t nowEpoch);   //
 
 bool validPin(const char* s, size_t n);          // exactly 6 ASCII digits
 bool weakPin(const char* s, size_t n);           // all same digit, or a straight ascending/descending run
-bool ctEqual(const uint8_t* a, const uint8_t* b, size_t n);   // constant time
+bool ctEqual(const uint8_t* a, const uint8_t* b, size_t n);   // zero length is equal; null with nonzero length is false; constant time for valid buffers
 }

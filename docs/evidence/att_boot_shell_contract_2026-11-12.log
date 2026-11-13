@@ -1,0 +1,5 @@
+PASS: read-only boot-shell source contract
+PASS: startup guard precedes NVS-backed owner construction
+PASS: exactly GET / and GET /api/status; mutations are disabled
+PASS: response security headers and disabled feature flags present
+PASS: pinned dependencies and signed 4 MB partition table

@@ -1,6 +1,6 @@
 # SPEC: roster_store (lib/core/src/roster_store.h/.cpp)
 
-Status: DELEGATED design. Host tests: test_roster (9). Device: run once.
+Status: DELEGATED design. Host tests: test_roster (15 in v0.2.66 focused run). Device: run once.
 
 ## Record format (event-sourced from the log)
 - Create or rename: EV_ROSTER(a = id, b = RA_SET=1, FL_MORE) then four EV_PAYLOAD records. Payloads 1-3 carry FL_MORE, payload 4 does not. Together they hold the name (32 bytes, zero-padded, 8 bytes per payload, little-endian).
@@ -24,7 +24,7 @@ A malformed group or record increments malformed() and changes nothing. Rejectio
 known(id) = ever created. IDs are never reused. Deactivated students stay known and can still be corrected.
 
 ## Plan functions
-planSet / planDeactivate / planActivate return events only. The store task appends them. RE_NOOP = no change needed (same name, already inactive or already active).
+planSet / planDeactivate / planActivate return events only. The store task appends them. RE_NOOP = no change needed (same name, already inactive or already active). A null event output returns RE_BAD_OUTPUT with count zero; RE_BAD_OUTPUT is appended to RosterErr so existing numeric values remain unchanged. nameOf() returns zero for an unknown ID or a null output destination and never writes through a null pointer.
 
 ## Known gaps
 - The roster is not stored separately. Restore relies on replaying the log. Cost of replaying a large log at boot: UNMEASURED.

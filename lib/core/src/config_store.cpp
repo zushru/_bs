@@ -39,7 +39,7 @@ Config defaultConfig() {
   memset(&c, 0, sizeof c);
   c.params.utcOffsetMin = 480;
   c.params.lateMin = 30;
-  c.params.scanLeadMin = 15;
+  c.params.scanLeadMin = 30;
   c.tt = defaultTimetable();
   c.termStart = -1;
   c.termEnd = -1;
@@ -120,6 +120,9 @@ CfgDec decodeConfig(const uint8_t in[CFG_SLOT_SIZE], Config& c, uint32_t& seq) {
   t.params.utcOffsetMin = (int16_t)g16(p + 0);
   t.params.lateMin = g16(p + 2);
   t.params.scanLeadMin = g16(p + 4);
+  // The old product default was 15 minutes. The new default is 30; preserve
+  // explicitly configured non-default values and keep the v1 slot layout.
+  if (t.params.scanLeadMin == 15) t.params.scanLeadMin = 30;
   for (int d = 0; d < 5; d++)
     for (int s = 0; s < 2; s++) {
       const uint8_t* q = p + 6 + (d * 2 + s) * 5;
@@ -153,7 +156,10 @@ CfgPick pickSlot(const uint8_t a[CFG_SLOT_SIZE], const uint8_t b[CFG_SLOT_SIZE],
   bool oa = da == CD_OK, ob = db == CD_OK;
   if (oa && ob) {
     if (sa == sb) {
-      if (!configEqual(ca, cb)) return r;           // same seq, different content
+      // Compare the encoded records as well as normalized configs. A migration
+      // must not hide different same-generation source bytes (e.g. old lead 15
+      // versus 30) by decoding both to the same effective setting.
+      if (memcmp(a, b, USED) != 0 || !configEqual(ca, cb)) return r;
       out = ca; return CfgPick{CB_OK, 0, sa};
     }
     if (sa > sb) { out = ca; return CfgPick{CB_OK, 0, sa}; }

@@ -2,23 +2,34 @@
 #include "day_view.h"
 #include "log_index.h"
 namespace att {
+struct Config;
 const uint32_t TICK_PERIOD_S = 300;
 const int MAX_TRACK_DAYS = 400;
 class IRoster {
  public:
   virtual ~IRoster() {}
   virtual bool expected(uint16_t id, int32_t day) = 0;
+  // False when the roster projection is incomplete or otherwise untrusted.
+  // Closure must not snapshot a partial roster into an apparently valid CLOSE.
+  virtual bool historyComplete() const = 0;
 };
 // NOTE: ClosureEngine embeds a LogIndex (~14 KB). Allocate it statically or on the heap, never on a task stack.
 class ClosureEngine {
  public:
   ClosureEngine(LogStore& log, const Params& p, const Timetable& t, IRoster& r, uint16_t cap, int32_t termStartDay);
+  // Call after config validation and durable commit, serialized with engine operations.
+  // Preserves the existing LogIndex, last tick, and health-gap state.
+  void setSchedule(const Params& p, const Timetable& t, int32_t termStartDay);
   void onBoot(uint32_t now, uint32_t lastTickFromNvs);
   void onHealth(uint32_t now, bool healthy, uint16_t cause);
   bool onTick(uint32_t now);
   uint32_t lastTick() const { return lastTick_; }
   bool step(uint32_t now);
   bool pending() const { return pending_; }
+  bool ready() const { return indexOk_; }
+  bool usesLog(const LogStore& log) const { return &log_ == &log; }
+  bool usesRoster(const IRoster& roster) const { return &roster_ == &roster; }
+  bool matchesConfig(const Config& config) const;
   void invalidate() {}          // no-op: the index follows the log through the observer
   const LogIndex& index() const { return index_; }
  private:

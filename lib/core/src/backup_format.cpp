@@ -165,6 +165,7 @@ bool RestoreValidator::step_() {
       Event e;
       if (!decode(buf_, e) || e.seq != lastSeq_ + 1) return fail_();
       if (stg_ && !stg_->append(buf_, REC_SIZE)) return fail_();
+      recordsCrc_.add(buf_, REC_SIZE);
       lastSeq_ = e.seq; prevMore_ = flagMore(e.flags);
       for (size_t i = 0; i < nobs_; i++) obs_[i]->onRecord(e);
       if (--left_ == 0) {

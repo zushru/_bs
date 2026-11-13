@@ -2,17 +2,26 @@
 #include <string.h>
 #include <vector>
 #include "roster_store.h"
+#include "enrolled_roster.h"
 using namespace att;
 
 void setUp() {}
 void tearDown() {}
 
 struct MemStore : IStorage {
+  MemStore() : failAfterWrite_(false) {}
   std::vector<uint8_t> d;
-  size_t size() override { return d.size(); }
+  bool sizeChecked(size_t& out) override { out = d.size(); return true; }
   bool read(size_t o, uint8_t* b, size_t n) override { if (o + n > d.size()) return false; memcpy(b, d.data() + o, n); return true; }
-  bool append(const uint8_t* b, size_t n) override { d.insert(d.end(), b, b + n); return true; }
+  bool append(const uint8_t* b, size_t n) override {
+    d.insert(d.end(), b, b + n);
+    if (failAfterWrite_) { failAfterWrite_ = false; return false; }
+    return true;
+  }
   bool truncate(size_t n) override { d.resize(n); return true; }
+  void failAfterWriteOnce() { failAfterWrite_ = true; }
+ private:
+  bool failAfterWrite_;
 };
 static uint32_t noon(int32_t day) { return dayStartEpoch(day, 480) + 12 * 3600; }
 
@@ -148,6 +157,182 @@ void test_incomplete_group_is_ignored() {
   r.onRecord(Event{EV_ROSTER, 0, 4, noon(100), 10, RA_DEACTIVATE});
   TEST_ASSERT_EQUAL_UINT32(0, r.knownCount());
 }
+void test_set_and_rename_retry_after_complete_append_failure_and_replay() {
+  MemStore storage;
+  LogStore first(storage);
+  RosterStore live(480);
+  TEST_ASSERT_TRUE(first.open().ok);
+  TEST_ASSERT_TRUE(first.attach(&live));
+
+  Event events[5]; size_t count = 0;
+  TEST_ASSERT_EQUAL_INT(RE_OK, live.planSet(5, "Ana", 3, noon(100), events, count));
+  TEST_ASSERT_EQUAL_UINT32(5, count);
+  storage.failAfterWriteOnce();
+  TEST_ASSERT_FALSE(first.append(events, count));
+  TEST_ASSERT_TRUE(first.faulted());
+  TEST_ASSERT_FALSE(live.known(5));  // failed LogStore instance did not notify observers
+
+  LogStore afterCreate(storage);
+  OpenInfo created = afterCreate.open();
+  TEST_ASSERT_TRUE(created.ok);
+  TEST_ASSERT_EQUAL_UINT32(5, created.records);
+  RosterStore replayed(480);
+  TEST_ASSERT_TRUE(afterCreate.attach(&replayed));
+  TEST_ASSERT_TRUE(replayed.known(5));
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_NOOP,
+      replayed.planSet(5, "Ana", 3, noon(101), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+
+  TEST_ASSERT_EQUAL_INT(RE_OK,
+      replayed.planSet(5, "Ana Reyes", 9, noon(110), events, count));
+  TEST_ASSERT_EQUAL_UINT32(5, count);
+  storage.failAfterWriteOnce();
+  TEST_ASSERT_FALSE(afterCreate.append(events, count));
+  TEST_ASSERT_TRUE(afterCreate.faulted());
+  char name[ROSTER_NAME_MAX + 1];
+  TEST_ASSERT_EQUAL_UINT32(3, replayed.nameOf(5, name));
+  TEST_ASSERT_EQUAL_STRING("Ana", name);  // no speculative observer update
+
+  LogStore afterRename(storage);
+  OpenInfo renamed = afterRename.open();
+  TEST_ASSERT_TRUE(renamed.ok);
+  TEST_ASSERT_EQUAL_UINT32(10, renamed.records);
+  RosterStore replayedRename(480);
+  TEST_ASSERT_TRUE(afterRename.attach(&replayedRename));
+  TEST_ASSERT_EQUAL_UINT32(9, replayedRename.nameOf(5, name));
+  TEST_ASSERT_EQUAL_STRING("Ana Reyes", name);
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_NOOP,
+      replayedRename.planSet(5, "Ana Reyes", 9, noon(111), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+}
+
+void test_activate_and_deactivate_retry_after_complete_append_failure_and_replay() {
+  MemStore storage;
+  LogStore first(storage);
+  RosterStore initial(480);
+  TEST_ASSERT_TRUE(first.open().ok);
+  TEST_ASSERT_TRUE(first.attach(&initial));
+  Event events[5]; size_t count = 0;
+  TEST_ASSERT_EQUAL_INT(RE_OK,
+      initial.planSet(7, "Ben", 3, noon(100), events, count));
+  TEST_ASSERT_TRUE(first.append(events, count));
+
+  TEST_ASSERT_EQUAL_INT(RE_OK,
+      initial.planDeactivate(7, noon(120), events, count));
+  TEST_ASSERT_EQUAL_UINT32(1, count);
+  storage.failAfterWriteOnce();
+  TEST_ASSERT_FALSE(first.append(events, count));
+  TEST_ASSERT_TRUE(first.faulted());
+  TEST_ASSERT_TRUE(initial.active(7));  // append-failed cache is intentionally stale
+
+  LogStore afterDeactivate(storage);
+  OpenInfo deactivated = afterDeactivate.open();
+  TEST_ASSERT_TRUE(deactivated.ok);
+  TEST_ASSERT_EQUAL_UINT32(6, deactivated.records);
+  RosterStore replayed(480);
+  TEST_ASSERT_TRUE(afterDeactivate.attach(&replayed));
+  TEST_ASSERT_FALSE(replayed.active(7));
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_NOOP,
+      replayed.planDeactivate(7, noon(121), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+
+  TEST_ASSERT_EQUAL_INT(RE_OK,
+      replayed.planActivate(7, noon(130), events, count));
+  TEST_ASSERT_EQUAL_UINT32(1, count);
+  storage.failAfterWriteOnce();
+  TEST_ASSERT_FALSE(afterDeactivate.append(events, count));
+  TEST_ASSERT_TRUE(afterDeactivate.faulted());
+  TEST_ASSERT_FALSE(replayed.active(7));
+
+  LogStore afterActivate(storage);
+  OpenInfo activated = afterActivate.open();
+  TEST_ASSERT_TRUE(activated.ok);
+  TEST_ASSERT_EQUAL_UINT32(7, activated.records);
+  RosterStore replayedAgain(480);
+  TEST_ASSERT_TRUE(afterActivate.attach(&replayedAgain));
+  TEST_ASSERT_TRUE(replayedAgain.active(7));
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_NOOP,
+      replayedAgain.planActivate(7, noon(131), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+}
+
+void test_pending_set_group_is_not_trusted_before_parser_resolves_it() {
+  RosterStore pending(480);
+  pending.onRecord(Event{EV_ROSTER, FL_MORE, 5, noon(100), 1, RA_SET});
+  pending.onRecord(makePayload(0x0000000000000041ull, 2, true));
+  TEST_ASSERT_EQUAL_UINT32(0, pending.malformed());
+  TEST_ASSERT_FALSE(pending.historyComplete());
+  TEST_ASSERT_FALSE(pending.expected(5, 100));
+  Event events[5]; size_t count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_UNTRUSTED,
+      pending.planSet(5, "Ana", 3, noon(101), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+}
+
+void test_incomplete_history_blocks_expected_reconcile_and_enrollment_helpers() {
+  Rig g;
+  TEST_ASSERT_EQUAL_INT(RE_OK, g.set(5, "Ana", 100));
+  Event malformed = Event{EV_ROSTER, 0, 5, noon(120), 0, 99};
+  TEST_ASSERT_TRUE(g.ls.append(&malformed, 1));
+  TEST_ASSERT_FALSE(g.r.historyComplete());
+  TEST_ASSERT_FALSE(g.r.expected(5, 120));
+
+  Occupancy occupancy;
+  occupancy.begin();
+  occupancy.setPresent(5, true);
+  occupancy.finish();
+  const Reconcile summary = reconcile(g.r, occupancy);
+  TEST_ASSERT_FALSE(summary.valid);
+  TEST_ASSERT_EQUAL_UINT32(0, summary.matched);
+  TEST_ASSERT_EQUAL_UINT32(0, summary.orphans);
+  TEST_ASSERT_EQUAL_UINT32(0, summary.strays);
+  TEST_ASSERT_EQUAL_UINT16(0, nextToEnroll(g.r, occupancy, 0));
+  TEST_ASSERT_EQUAL_UINT16(0, firstFreeSlot(g.r, occupancy, 300));
+
+  EnrolledRoster enrolled(g.r, occupancy);
+  TEST_ASSERT_FALSE(enrolled.expected(5, 120));
+
+  Event events[5]; size_t count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_UNTRUSTED,
+      g.r.planSet(5, "Ana New", 7, noon(121), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_UNTRUSTED,
+      g.r.planDeactivate(5, noon(121), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_UNTRUSTED,
+      g.r.planActivate(5, noon(121), events, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+}
+
+void test_closure_refuses_to_close_when_roster_history_is_incomplete() {
+  Rig g;
+  TEST_ASSERT_EQUAL_INT(RE_OK, g.set(5, "Ana", 100));
+  g.r.onRecord(Event{EV_ROSTER, FL_MORE, 5, noon(120), 0, RA_SET});
+  g.r.onRecord(makePayload(0x0000000000000041ull, 0, true));
+  TEST_ASSERT_EQUAL_UINT32(0, g.r.malformed());
+  TEST_ASSERT_FALSE(g.r.historyComplete());
+
+  Occupancy occupancy;
+  occupancy.begin();
+  occupancy.finish();
+  EnrolledRoster enrolled(g.r, occupancy);
+  TEST_ASSERT_FALSE(enrolled.historyComplete());
+
+  Params params = {480, 30, 15};
+  Timetable timetable = defaultTimetable();
+  ClosureEngine closure(g.ls, params, timetable, enrolled, MAX_ID, 1);
+  const uint32_t afterAmEnd = dayStartEpoch(1, 480) + 13u * 3600u;
+  TEST_ASSERT_FALSE(closure.step(afterAmEnd));
+  TEST_ASSERT_TRUE(closure.pending());
+  TEST_ASSERT_EQUAL_UINT32(5, g.ls.count());  // do not append a CLOSE from a pending roster group
+}
+
 void test_interval_overflow_fails_closed() {
   Rig g;
   g.set(1, "Ana", 100);
@@ -166,7 +351,29 @@ void test_interval_overflow_fails_closed() {
   TEST_ASSERT_TRUE(g.r.overflow());
   TEST_ASSERT_FALSE(g.r.expected(2, 100));               // nobody expected: never a false Absent
   Event ne[5]; size_t c;
-  TEST_ASSERT_EQUAL_INT(RE_FULL, g.r.planSet(9, "Cy", 2, 1, ne, c));
+  TEST_ASSERT_EQUAL_INT(RE_UNTRUSTED, g.r.planSet(9, "Cy", 2, 1, ne, c));
+}
+
+void test_null_output_buffers_are_rejected_without_mutation() {
+  Rig g;
+  g.set(1, "Ana", 100);
+  g.off(1, 120);
+  size_t count = 99;
+
+  TEST_ASSERT_EQUAL_INT(RE_BAD_OUTPUT, g.r.planSet(2, "Ben", 3, 130, nullptr, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+  TEST_ASSERT_FALSE(g.r.known(2));
+
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_BAD_OUTPUT, g.r.planDeactivate(1, 130, nullptr, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+  count = 99;
+  TEST_ASSERT_EQUAL_INT(RE_BAD_OUTPUT, g.r.planActivate(1, 130, nullptr, count));
+  TEST_ASSERT_EQUAL_UINT32(0, count);
+
+  TEST_ASSERT_EQUAL_UINT32(0, g.r.nameOf(1, nullptr));
+  TEST_ASSERT_TRUE(g.r.known(1));
+  TEST_ASSERT_FALSE(g.r.active(1));
 }
 
 int main() {
@@ -179,6 +386,12 @@ int main() {
   RUN_TEST(test_name_packing);
   RUN_TEST(test_replay_matches_live);
   RUN_TEST(test_incomplete_group_is_ignored);
+  RUN_TEST(test_set_and_rename_retry_after_complete_append_failure_and_replay);
+  RUN_TEST(test_activate_and_deactivate_retry_after_complete_append_failure_and_replay);
+  RUN_TEST(test_pending_set_group_is_not_trusted_before_parser_resolves_it);
+  RUN_TEST(test_incomplete_history_blocks_expected_reconcile_and_enrollment_helpers);
+  RUN_TEST(test_closure_refuses_to_close_when_roster_history_is_incomplete);
+  RUN_TEST(test_null_output_buffers_are_rejected_without_mutation);
   RUN_TEST(test_interval_overflow_fails_closed);
   return UNITY_END();
 }

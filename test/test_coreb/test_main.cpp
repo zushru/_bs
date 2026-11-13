@@ -66,16 +66,19 @@ void test_log_append_failure_latches() {
   TEST_ASSERT_TRUE(put(l, mk(EV_BOOT, 0, 0, 3, 0)));
   TEST_ASSERT_EQUAL_UINT32(2, l.count());
 }
-void test_log_torn_partial_record() {
+void test_log_torn_partial_record_is_preserved_and_blocks_open() {
   MemStorage ms; LogStore l(ms); l.open();
   put(l, mk(EV_BOOT, 0, 0, 1, 0)); put(l, mk(EV_BOOT, 0, 0, 2, 0));
   for (int i = 0; i < 5; i++) ms.d.push_back(0xAB);
   LogStore l2(ms);
   OpenInfo o = l2.open();
-  TEST_ASSERT_TRUE(o.ok); TEST_ASSERT_EQUAL_UINT32(2, o.records); TEST_ASSERT_EQUAL_UINT32(5, o.tornBytes);
-  TEST_ASSERT_EQUAL_UINT32(32, ms.d.size());
+  TEST_ASSERT_FALSE(o.ok);
+  TEST_ASSERT_EQUAL_UINT32(5, o.tornBytes);
+  TEST_ASSERT_TRUE(l2.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, l2.count());
+  TEST_ASSERT_EQUAL_UINT32(37, ms.d.size());
 }
-void test_log_torn_group_dropped() {
+void test_log_torn_group_is_preserved_and_blocks_open() {
   MemStorage ms; LogStore l(ms); l.open();
   put(l, mk(EV_BOOT, 0, 0, 1, 0));
   Event g[3] = {mk(EV_ROSTER, 0, 1, 2, 0), mk(EV_ROSTER, 0, 2, 3, 0), mk(EV_ROSTER, 0, 3, 4, 0)};
@@ -83,10 +86,13 @@ void test_log_torn_group_dropped() {
   TEST_ASSERT_FALSE(l.append(g, 3));
   LogStore l2(ms);
   OpenInfo o = l2.open();
-  TEST_ASSERT_TRUE(o.ok); TEST_ASSERT_EQUAL_UINT32(1, o.records); TEST_ASSERT_EQUAL_UINT32(2, o.droppedGroup);
-  TEST_ASSERT_EQUAL_UINT32(16, ms.d.size());
-  TEST_ASSERT_TRUE(put(l2, mk(EV_BOOT, 0, 0, 5, 0)));
-  TEST_ASSERT_EQUAL_UINT32(2, l2.lastSeq());                 // seq continues without a hole
+  TEST_ASSERT_FALSE(o.ok);
+  TEST_ASSERT_EQUAL_UINT32(2, o.droppedGroup);
+  TEST_ASSERT_TRUE(l2.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, l2.count());
+  TEST_ASSERT_EQUAL_UINT32(48, ms.d.size());
+  Event next = mk(EV_BOOT, 0, 0, 5, 0);
+  TEST_ASSERT_FALSE(l2.append(&next, 1));
 }
 void test_log_mid_corruption_detected() {
   MemStorage ms; LogStore l(ms); l.open();
@@ -99,22 +105,30 @@ void test_log_mid_corruption_detected() {
   TEST_ASSERT_FALSE(put(l2, mk(EV_BOOT, 0, 0, 9, 0)));
   TEST_ASSERT_EQUAL_UINT32(80, ms.d.size());                 // nothing was truncated or rewritten
 }
-void test_log_bad_tail_record_is_repaired() {
+void test_log_bad_tail_record_is_preserved_and_blocks_open() {
   MemStorage ms; LogStore l(ms); l.open();
   for (int i = 0; i < 3; i++) put(l, mk(EV_BOOT, 0, 0, (uint32_t)i + 1, 0));
-  ms.d[2 * 16 + 1] ^= 0x01;                                  // last record corrupted, nothing valid after it
+  ms.d[2 * 16 + 1] ^= 0x01;                                  // complete record corrupted at EOF
   LogStore l2(ms);
   OpenInfo o = l2.open();
-  TEST_ASSERT_TRUE(o.ok); TEST_ASSERT_EQUAL_UINT32(2, o.records); TEST_ASSERT_EQUAL_UINT32(16, o.tornBytes);
+  TEST_ASSERT_FALSE(o.ok);
+  TEST_ASSERT_EQUAL_INT(32, o.corruptAt);
+  TEST_ASSERT_EQUAL_UINT32(16, o.tornBytes);
+  TEST_ASSERT_TRUE(l2.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, l2.count());
+  TEST_ASSERT_EQUAL_UINT32(48, ms.d.size());
 }
-void test_log_truncate_failure_is_a_fault() {
+void test_log_partial_tail_is_preserved_without_attempting_truncate() {
   MemStorage ms; LogStore l(ms); l.open();
   put(l, mk(EV_BOOT, 0, 0, 1, 0));
   ms.d.push_back(1);
-  ms.failTruncate = true;
+  ms.failTruncate = true;                                   // open must not invoke truncate at all
   LogStore l2(ms);
-  TEST_ASSERT_FALSE(l2.open().ok);
+  OpenInfo o = l2.open();
+  TEST_ASSERT_FALSE(o.ok);
   TEST_ASSERT_TRUE(l2.faulted());
+  TEST_ASSERT_EQUAL_UINT32(1, o.tornBytes);
+  TEST_ASSERT_EQUAL_UINT32(17, ms.d.size());
 }
 void test_log_baseline_epoch() {
   MemStorage ms; LogStore l(ms); l.open();
@@ -327,6 +341,59 @@ void test_failed_boot_gap_is_retried() {
   r.eng.onHealth(E(FRI, 501), true, GAP_SENSOR);             // retried on recovery
   TEST_ASSERT_EQUAL_INT(1, r.countType(EV_GAP));
 }
+void test_engine_set_schedule_updates_window_and_session_end() {
+  Rig r;
+  Params nextP = {0, 30, 30};
+  Timetable nextT = defaultTimetable();
+  nextT.day[4][0].start = 500;  // Friday 08:20
+  nextT.day[4][0].end = 765;    // Friday 12:45
+  r.eng.setSchedule(nextP, nextT, FRI);
+
+  TEST_ASSERT_FALSE(r.eng.onTick(E(FRI, 469)));  // New window opens at 07:50, not old 07:45.
+  TEST_ASSERT_TRUE(r.eng.onTick(E(FRI, 470)));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 764)));
+  TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 765)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+  Event e;
+  bool found = false;
+  for (size_t i = 0; i < r.log.count(); i++) {
+    TEST_ASSERT_TRUE(r.log.at(i, e));
+    if (e.type == EV_CLOSE) {
+      found = true;
+      TEST_ASSERT_EQUAL_INT(FRI, e.b);
+      TEST_ASSERT_EQUAL_INT(0, flagSession(e.flags));
+    }
+  }
+  TEST_ASSERT_TRUE(found);
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 766)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));  // Existing LogIndex still observes the close.
+}
+void test_engine_set_schedule_updates_utc_offset() {
+  Rig r;
+  Params nextP = {480, 30, 15};
+  Timetable nextT = defaultTimetable();
+  r.eng.setSchedule(nextP, nextT, FRI);
+
+  // 04:29 UTC is 12:29 PHT; the AM session closes at 12:30 PHT.
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 269)));
+  TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 270)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+}
+void test_engine_set_schedule_updates_term_start() {
+  Rig r(FRI - 10);
+  Params nextP = {0, 30, 15};
+  Timetable nextT = defaultTimetable();
+  r.eng.setSchedule(nextP, nextT, FRI);
+
+  // Monday is after the old term start but before the newly configured term start.
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI - 4, 1000)));
+  TEST_ASSERT_EQUAL_INT(0, r.countType(EV_CLOSE));
+  TEST_ASSERT_TRUE(r.eng.step(E(FRI, 750)));
+  TEST_ASSERT_EQUAL_INT(1, r.countType(EV_CLOSE));
+}
+
 void test_no_close_for_weekend_or_before_term() {
   Rig r(FRI);
   r.eng.onBoot(E(FRI, 400), 0);
@@ -369,7 +436,7 @@ void test_close_snapshots_roster() {
 }
 
 // ================= health_fsm =================
-static HealthInputs good() { HealthInputs i = {true, true, false, false, false, true, true, true, false}; return i; }
+static HealthInputs good() { HealthInputs i = {true, true, false, false, false, true, true, true, false, true}; return i; }
 void test_health_priority_and_perms() {
   HealthFsm h;
   TEST_ASSERT_EQUAL_INT(H_OK, h.update(good()));
@@ -407,6 +474,30 @@ void test_health_faults_latch_until_reverified() {
   i.reverified = true;                                       // verified but the cause is still active
   TEST_ASSERT_EQUAL_INT(H_CLOCK_FAULT, h.update(i));
 }
+void test_health_clock_reverification_clears_only_clock_latch() {
+  HealthFsm h;
+  HealthInputs i = good();
+  i.clockTrusted = false;
+  i.storageOk = false;
+  i.cfgOk = false;
+  i.sensorOk = false;
+  TEST_ASSERT_EQUAL_INT(H_STORAGE_FAULT, h.update(i));
+  TEST_ASSERT_EQUAL_UINT8(HB_STORAGE | HB_CONFIG | HB_CLOCK | HB_SENSOR,
+                          h.mask());
+
+  // Clock-only verification leaves storage/config latches and sensor fault.
+  i = good();
+  i.sensorOk = false;
+  TEST_ASSERT_EQUAL_INT(H_STORAGE_FAULT, h.update(i, true));
+  TEST_ASSERT_EQUAL_UINT8(HB_STORAGE | HB_CONFIG | HB_SENSOR, h.mask());
+
+  // It cannot clear a clock cause that remains active.
+  i.clockTrusted = false;
+  TEST_ASSERT_EQUAL_INT(H_STORAGE_FAULT, h.update(i, true));
+  TEST_ASSERT_EQUAL_UINT8(HB_STORAGE | HB_CONFIG | HB_CLOCK | HB_SENSOR,
+                          h.mask());
+}
+
 void test_health_unprovisioned_and_sensor_do_not_latch() {
   HealthFsm h;
   HealthInputs i = good(); i.provisioned = false;
@@ -496,7 +587,7 @@ void test_clock_apply_writes_one_group() {
   ClockDecision d = decideClock(c);
   TEST_ASSERT_EQUAL_INT(CA_APPLY, d.action);
   size_t before = r.log.count();
-  TEST_ASSERT_TRUE(applyClockSet(r.log, d, c.deviceEpoch, c.clientEpoch));
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_COMMITTED, applyClockSet(r.log, d, c.deviceEpoch, c.clientEpoch));
   TEST_ASSERT_EQUAL_UINT32(before + 3, r.log.count());       // GAP + CLOCK_SET old + CLOCK_SET new
   Event e;
   r.log.at(before, e);     TEST_ASSERT_EQUAL_INT(EV_GAP, e.type); TEST_ASSERT_TRUE(flagMore(e.flags));
@@ -506,12 +597,110 @@ void test_clock_apply_writes_one_group() {
   Rig r2;                                                    // a torn clock-set group leaves the old time authoritative
   put(r2.log, scanEv(1, E(FRI, 490), ST_PRESENT));
   r2.ms.tearBytes = 32;
-  TEST_ASSERT_FALSE(applyClockSet(r2.log, d, c.deviceEpoch, c.clientEpoch));
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_COMMIT_UNCERTAIN, applyClockSet(r2.log, d, c.deviceEpoch, c.clientEpoch));
+  const std::vector<uint8_t> damaged = r2.ms.d;
   LogStore again(r2.ms);
   OpenInfo o = again.open();
-  TEST_ASSERT_TRUE(o.ok); TEST_ASSERT_EQUAL_UINT32(1, o.records); TEST_ASSERT_EQUAL_UINT32(2, o.droppedGroup);
-  TEST_ASSERT_EQUAL_UINT32(E(FRI, 490), o.baselineEpoch);
+  TEST_ASSERT_FALSE(o.ok);
+  TEST_ASSERT_EQUAL_UINT32(2, o.droppedGroup);
+  TEST_ASSERT_TRUE(again.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, again.count());
+  TEST_ASSERT_EQUAL_UINT32(damaged.size(), r2.ms.d.size());
+  TEST_ASSERT_EQUAL_INT(0, memcmp(damaged.data(), r2.ms.d.data(), damaged.size()));
 }
+void test_clock_apply_rejects_unapproved_or_invalid_decisions_without_writing() {
+  MemStorage ms; LogStore log(ms);
+  TEST_ASSERT_TRUE(log.open().ok);
+  ClockDecision d = {CA_NONE, 0, SRC_MANUAL, false, 0, 0};
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  d.action = CA_NEED_CONFIRM_BACK;
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  d.action = CA_NEED_CONFIRM_JUMP;
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  d.action = CA_BLOCKED_WINDOW;
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  d.action = CA_APPLY;
+  d.gapFrom = 300; d.gapTo = 299;
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  d.gapFrom = d.gapTo = 0;
+  d.source = (uint16_t)(SRC_WIZARD + 1);
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  TEST_ASSERT_EQUAL_UINT32(0, log.count());
+  TEST_ASSERT_EQUAL_UINT32(0, ms.d.size());
+  TEST_ASSERT_FALSE(log.faulted());
+}
+void test_clock_apply_rejects_unrepresentable_epoch_tail_before_any_write() {
+  MemStorage bytes; LogStore log(bytes);
+  TEST_ASSERT_TRUE(log.open().ok);
+  ClockDecision d = {CA_APPLY, 0, SRC_MANUAL, false,
+                     UINT32_MAX - 100u, UINT32_MAX};
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_REJECTED, applyClockSet(log, d, 111, 222));
+  TEST_ASSERT_FALSE(log.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, log.count());
+  TEST_ASSERT_EQUAL_UINT32(0, bytes.d.size());
+}
+void test_clock_apply_distinguishes_faulted_log_from_attempted_commit() {
+  MemStorage unopenedBytes;
+  LogStore unopened(unopenedBytes);
+  ClockDecision d = {CA_APPLY, 0, SRC_MANUAL, false, 0, 0};
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_LOG_FAULTED, applyClockSet(unopened, d, 111, 222));
+  TEST_ASSERT_EQUAL_UINT32(0, unopenedBytes.d.size());
+
+  MemStorage bytes; LogStore log(bytes);
+  TEST_ASSERT_TRUE(log.open().ok);
+  bytes.failAppend = true;
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_COMMIT_UNCERTAIN, applyClockSet(log, d, 111, 222));
+  TEST_ASSERT_TRUE(log.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, log.count());
+  TEST_ASSERT_EQUAL_UINT32(0, bytes.d.size());
+}
+void test_clock_apply_complete_write_then_false_is_uncertain_and_replayed() {
+  MemStorage bytes; LogStore log(bytes);
+  TEST_ASSERT_TRUE(log.open().ok);
+  ClockDecision d = {CA_APPLY, 0, SRC_MANUAL, false, 0, 0};
+  bytes.completeAppendThenFail = true;
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_COMMIT_UNCERTAIN, applyClockSet(log, d, 111, 222));
+  TEST_ASSERT_TRUE(log.faulted());
+  TEST_ASSERT_EQUAL_UINT32(0, log.count());
+
+  LogStore recovered(bytes);
+  OpenInfo opened = recovered.open();
+  TEST_ASSERT_TRUE(opened.ok);
+  TEST_ASSERT_EQUAL_UINT32(2, opened.records);
+  TEST_ASSERT_EQUAL_UINT32(222, opened.baselineEpoch);
+  Event oldSet, newSet;
+  TEST_ASSERT_TRUE(recovered.at(0, oldSet));
+  TEST_ASSERT_TRUE(recovered.at(1, newSet));
+  TEST_ASSERT_EQUAL_INT(EV_CLOCK_SET, oldSet.type);
+  TEST_ASSERT_EQUAL_INT(EV_CLOCK_SET, newSet.type);
+  TEST_ASSERT_EQUAL_UINT32(111, oldSet.epoch);
+  TEST_ASSERT_EQUAL_UINT32(222, newSet.epoch);
+}
+void test_clock_apply_late_group_failure_leaves_gap_prefix_but_no_clock_pair() {
+  MemStorage bytes; LogStore log(bytes);
+  TEST_ASSERT_TRUE(log.open().ok);
+  const uint32_t from = 1000;
+  const uint32_t to = from + 20u * 65535u * 60u;
+  const uint32_t oldEpoch = 3000000000u, newEpoch = 3000000001u;
+  ClockDecision d = {CA_APPLY, 0, SRC_MANUAL, false, from, to};
+  bytes.failAppendAt = 2; // first 14 GAPs persist; the final GAP+CLOCK_SET group is refused
+  TEST_ASSERT_EQUAL_INT(CLOCK_APPLY_COMMIT_UNCERTAIN, applyClockSet(log, d, oldEpoch, newEpoch));
+  TEST_ASSERT_TRUE(log.faulted());
+  TEST_ASSERT_EQUAL_UINT32(14, log.count());              // successful prefix append is tracked in this instance
+  TEST_ASSERT_EQUAL_UINT32(14u * REC_SIZE, bytes.d.size());
+
+  LogStore recovered(bytes);
+  OpenInfo opened = recovered.open();
+  TEST_ASSERT_TRUE(opened.ok);
+  TEST_ASSERT_EQUAL_UINT32(14, opened.records);
+  TEST_ASSERT_TRUE(opened.baselineEpoch < oldEpoch);       // no CLOCK_SET pair was appended
+  Event e;
+  for (size_t i = 0; i < recovered.count(); ++i) {
+    TEST_ASSERT_TRUE(recovered.at(i, e));
+    TEST_ASSERT_EQUAL_INT(EV_GAP, e.type);
+  }
+}
+
 void test_near_scan_window() {
   Timetable t = defaultTimetable(); Params p = {0, 30, 15};
   TEST_ASSERT_TRUE(nearScanWindow(t, p, E(FRI, 465), 300));
@@ -525,11 +714,11 @@ int main() {
   UNITY_BEGIN();
   RUN_TEST(test_log_group_append_and_reopen);
   RUN_TEST(test_log_append_failure_latches);
-  RUN_TEST(test_log_torn_partial_record);
-  RUN_TEST(test_log_torn_group_dropped);
+  RUN_TEST(test_log_torn_partial_record_is_preserved_and_blocks_open);
+  RUN_TEST(test_log_torn_group_is_preserved_and_blocks_open);
   RUN_TEST(test_log_mid_corruption_detected);
-  RUN_TEST(test_log_bad_tail_record_is_repaired);
-  RUN_TEST(test_log_truncate_failure_is_a_fault);
+  RUN_TEST(test_log_bad_tail_record_is_preserved_and_blocks_open);
+  RUN_TEST(test_log_partial_tail_is_preserved_without_attempting_truncate);
   RUN_TEST(test_log_baseline_epoch);
   RUN_TEST(test_log_group_limits_and_unopened);
   RUN_TEST(test_dayview_scan_mark_precedence);
@@ -546,18 +735,27 @@ int main() {
   RUN_TEST(test_closure_waits_while_unhealthy_then_recovers);
   RUN_TEST(test_storage_failure_during_closure);
   RUN_TEST(test_failed_boot_gap_is_retried);
+  RUN_TEST(test_engine_set_schedule_updates_window_and_session_end);
+  RUN_TEST(test_engine_set_schedule_updates_utc_offset);
+  RUN_TEST(test_engine_set_schedule_updates_term_start);
   RUN_TEST(test_no_close_for_weekend_or_before_term);
   RUN_TEST(test_long_gap_is_chunked_and_marks_old_sessions);
   RUN_TEST(test_tick_only_in_window_and_every_300s);
   RUN_TEST(test_close_snapshots_roster);
   RUN_TEST(test_health_priority_and_perms);
   RUN_TEST(test_health_faults_latch_until_reverified);
+  RUN_TEST(test_health_clock_reverification_clears_only_clock_latch);
   RUN_TEST(test_health_unprovisioned_and_sensor_do_not_latch);
   RUN_TEST(test_clock_small_delta_is_info_only);
   RUN_TEST(test_clock_auto_sync_rules);
   RUN_TEST(test_clock_explicit_rules);
   RUN_TEST(test_clock_fault_uses_log_reference);
   RUN_TEST(test_clock_apply_writes_one_group);
+  RUN_TEST(test_clock_apply_rejects_unapproved_or_invalid_decisions_without_writing);
+  RUN_TEST(test_clock_apply_rejects_unrepresentable_epoch_tail_before_any_write);
+  RUN_TEST(test_clock_apply_distinguishes_faulted_log_from_attempted_commit);
+  RUN_TEST(test_clock_apply_complete_write_then_false_is_uncertain_and_replayed);
+  RUN_TEST(test_clock_apply_late_group_failure_leaves_gap_prefix_but_no_clock_pair);
   RUN_TEST(test_near_scan_window);
   return UNITY_END();
 }

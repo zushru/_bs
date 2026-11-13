@@ -1,6 +1,28 @@
-# CONTEXT: start here
+# Current project context — verified 2026-11-12
 
-Snapshot: branch `main` of this repository (2 commits: handoff baseline, then this snapshot). Written 2026-11-04 for continuing development outside this chat (ChatGPT).
+**Current code baseline: v0.2.95.** The pre-edit live manifest had 451 entries and every entry passed; the protected handoff/decision hashes matched the recorded baseline. See `RELEASE_v0.2.96.md` for the documentation-only workflow alignment and final manifest verification.
+
+**Latest focused result:** `pio test -e native -f test_monthset -f test_littlefs_fileset -f test_littlefs_mount_owner -f test_littlefs_serialized_fileset` — **100/100 passed**, exit 0. This is host POSIX/fake-backend logic evidence, not target LittleFS runtime or durability proof.
+
+**Release blockers:** C13.3 target VFS/durability/interruption/physical power-cut evidence; C1/C34 authoritative boot ordering and broader erase boundaries; C3 production composition root; C6 production HTTP/auth boundary; C2 approved storage recovery/backup/restore. Residual OPEN/DELEGATED work: E18/U5, U61, U112 and SF2 reporting provenance/metadata/export.
+
+**Execution:** Follow `../DEVELOPMENT_WORKFLOW.md`. Full native N1 remains deferred until C13.3, C1/C34, C3, C6 and C2 are integrated. Keep host, compile/link, ELF, mounted-target and physical evidence distinct. Never flash the inert adapter-link target.
+
+---
+
+## Historical snapshot notes
+
+The dated snapshot entries below record prior increments. They are not current baseline or current test-pass claims unless explicitly identified as historical.
+
+Snapshot: **v0.2.94 development increment** based on v0.2.93. The 447-entry manifest and protected HANDOFF_FINAL.md/docs/DECISIONS.md hashes were verified before editing. v0.2.94 extends the native-only LittleFsFileSet test seam through addFile() open/fsync/close; three regressions prove an open failure creates no month file, while fsync/close failures return false after creating an empty file that is deliberately preserved. The three focused C13 suites pass 76/76. Current inventory: 738 C++ registrations across 39 suites; 270 SF2 registrations across 12 files. The pinned ESP32 inert smoke target compiled/linked and its ELF retains addFile/read/append/validator and mount-owner/backend methods. It did not mount or operate on LittleFS. C13.3 remains blocking for target VFS runtime/fault, low-space, parent-directory durability, restart/interruption and physical power-cut/brownout evidence. No recovery commit primitive/journal was selected and destructive methods remain disabled. C3, C1/C34 and C6 also remain blockers. See RELEASE_v0.2.94.md, docs/AUDIT_v0.2.94.md and the approved roadmap.
+
+Snapshot: **v0.2.91 development increment** based on the verified v0.2.90 tree in `/root/att`; its 439-entry manifest and protected handoff/decision hashes were verified before editing. v0.2.91 requires AP-credential and PIN-attempt NVS stores to bind the authoritative `ConfigBootCoordinator` and rejects operations unless it is `READY` or `NEEDS_SETUP`, as well as requiring a safe Arduino pre-setup NVS snapshot. The PIN runtime binds its store to the same coordinator. Test-first compile regressions reproduced both constructor bypasses; focused NVS tests pass **65/65**. Source inventory is **728 C++ RUN_TEST registrations across 39 suites** and **270 SF2 Node registrations across 12 test files**. The ESP32 smoke target compiled the changed `main.cpp` object and generated bootloader/partition artifacts, but was stopped during third-party Adafruit GFX compilation before changed HAL TUs/final link; no ELF exists. This is not production-root adoption or a raw-NVS/flash-erase firewall. C1/C34 remain blocking because no production root enforces the one authoritative boot coordinator, broad erase routes remain uncovered, and NVS power-cut/physical startup evidence is absent. C13.3 remains blocking: no production firmware root, mounted target VFS runtime/fault injection, proven commit primitive, journal, low-space/restart-interruption evidence or physical power-cut/brownout evidence. D1–D11 remain delegated and unchanged. ReqRing tickets remain RAM-only (U112); roster lifecycle validation is not integrated at all operational boundaries (U61); production clock caller integration remains C3. See DEVELOPMENT_ROADMAP.md, WORKING_MEMORY.md, docs/SPECS/config_boot.md, docs/SPECS/littlefs_recovery_protocol.md and docs/AUDIT_v0.2.91.md.
+
+v0.2.50 adds the ESP32-only compile guard for the IDF NVS wrapper, expands the inert smoke target to retain the AS608 transport/adapter/occupancy/enrollment/attendance composition, and fixes Xtensa ELF inspection to follow internal branch targets. The smoke composition is constructed in `setup()` after Arduino initialization; it does not start Serial2, send sensor commands, start Wi-Fi, request entropy, open application NVS handles, or invoke enrollment/attendance methods. Never flash the smoke target.
+
+The diagnostic probe is separate from production firmware. It scans I2C, exercises the OLED, starts a temporary WPA2 AP and reports the AP-netif DHCP event. It does not mount application storage or run attendance scans. Wi-Fi PHY calibration may use NVS namespace `phy`. The shared wrapper blocks only an exact whole-DATA_NVS `esp_partition_erase_range` request. Chunked ranges, the distinct DATA_NVS_KEYS subtype and direct `esp_flash_erase_region()` / `esp_flash_erase_chip()` calls are not generally covered. The v0.2.72 smoke ELF contains `esp_flash_erase_region()` but its only observed caller is `esp_partition_erase_range()`; no direct app caller was observed in that image. NVS bulk-erase APIs may deinitialize handles before the wrapped erase is rejected. The package-level `CONFIG_VFS_SUPPORT_DIR=y` setting exposes LittleFS ftruncate support in headers, but not runtime durability. C34 and C13 remain blocking; neither static ELF inspection nor package configuration is a physical/runtime proof.
+
+The two PlatformIO target configurations share `.pio/build`; the later build can replace the earlier ELF. `tools/verify_v0.2.51.sh links` therefore inspects each image immediately after its build. Use `targeted` for ordinary increments and reserve `full` for integration/release checkpoints.
 
 ## 1. What the device is
 An ESP32 attendance kiosk. An AS608 fingerprint sensor (300 templates), a DS3231 RTC, an OLED, and a buzzer. Powered from a 10,000 mAh bank in always-on mode. The admin uses a phone on the device's Wi-Fi access point. Two sessions per school day. Marks are Present, Late, Excused or Clear. Absent is derived and shown only when the session is closed and coverage is trusted. The product rules are in HANDOFF_FINAL.md and are signed off. Every decision is in docs/DECISIONS.md with its status.
@@ -8,20 +30,21 @@ An ESP32 attendance kiosk. An AS608 fingerprint sensor (300 templates), a DS3231
 ## 2. Where it stands
 | Part | Code | Host | Device | Status |
 |---|---|---|---|---|
-| Handoff core A/B (events, codec, log, index, closure, day view, health, clock) | lib/core/src | 20+36+11 | yes | Done, plus the Core B fixes (docs/SPECS/core_fixes.md) |
-| config_store | config_store.* | 12 | yes | Done. Engine link missing (C1) |
-| month files | fileset.h, month_set.* | 10 | yes | Interface done. LittleFS driver NOT written |
-| roster | roster_store.* | 9 | yes | Done |
-| backup container | backup_format.* | 9 | yes before template cut | Container done. Crypto NOT wired. Restore orchestrator NOT written (C2) |
-| API logic | api_logic.* | 20 | yes | Pure logic done. No HTTP or JSON adapter |
-| enrolled roster | enrolled_roster.* | 7 | NO | Helpers done. enroll_fsm NOT written (C3) |
-| Diagnostic sketch | sketch/ | — | yes | Bring-up tool only. Has the duplicate-template hazard (C5) |
-| Production firmware (drivers, scan path, NVS, OLED, buzzer patterns) | — | — | — | NOT STARTED |
-| Bulk enroll | — | — | — | Method chosen by me, not built |
+| Handoff core A/B (events, codec, log, index, closure, day view, health, clock) | lib/core/src | 20+39+11 | prior device evidence; v0.2.1 all-pass reported by user | Done, plus Core B fixes and three C1 regression cases |
+| config_store / config_apply | config_store.*, config_apply.*, config_provision.*, config_boot.*, config_runtime_guard.*, nvs_config_backend.* | 12 + 16 + 20 + 11 + 16 + 7 | User-provided v0.2.36 full native run: 413/413 across 23 suites | Core codec, A/B transaction coordinator, live runtime bridge, ESP32 NVS slot backend, one-shot boot/provision coordinator, boot-to-health mapping and current-window guard; exact target build and power-cut proof remain missing; historical `unclosedPast` blocked by C17 |
+| month files | fileset.h, month_set.*, lib/littlefs_file_set | v0.2.82: monthset 23/23, littlefs_mount_owner 22/22, littlefs_fileset 28/28, event_group_audit 20/20, roster_snapshot 26/26 (focused native POSIX/fake-backend runs) | v0.2.82 inert target compile/link result is recorded in RELEASE_v0.2.82.md; it does not mount | A reusable no-format LittleFS mount owner validates root/layout and captures/sorts month metadata once, then opens read-only descriptors and validates record CRC/type/global sequence/per-file commit boundaries. One RosterStore and RosterTransitionAudit carry semantic roster state across month files. Serialized IFileSet is exposed only after validation. This owner is not integrated into a production root. No target mount/VFS runtime, directory durability or power-loss evidence exists. MonthSet::repair() has no durable journal and must not be called by production. C13 remains blocking. |
+| roster | roster_store.*, roster_name_history.*, roster_snapshot.*, month_roster_projection.* | 9 + 6 + 17 + 16 authored | NO for new projection/reporting path | Read-only interval/known-ID enumeration, prefix-pinned scratch replay, lifecycle audit, historical names, and month-overlap interval projection added; the v0.2.36 user-provided full native run reports all 413 cases passed, including roster-history and month-roster suites; real device history and reporting metadata store/API remain absent |
+| backup/restore and event audit | backup_format.*, restore_replay.*, event_group_audit.* | 9 + 14 prior + 18 authored | prior container evidence only | Authenticated staging/replay plus reusable current-writer group audit require exactly six records for each 300-ID CLOSE group, validate SCAN/MARK/no-class record shapes, and fail closed on unsupported event types; live audit helper is not wired into firmware/API; crypto adapter, transaction journal, storage swap and reboot recovery remain missing (C2/C13/C25) |
+| API/auth core | api_logic.*, pin_auth.*, nvs_pin_attempt_store.*, esp32_pin_auth_runtime.*, pin_auth_session.*, esp32_secure_random.*, esp32_wifi_ap.*, ap_credential_bootstrap.*, nvs_ap_credential_store.*, esp32_bootstrap_random.*, esp32_oled.*, ap_credential_setup.* | Historical user report: v0.2.46 passed 520/520. v0.2.50 targeted NVS/probe tests passed 13/13, and both ESP32 targets plus final-ELF routing checks passed | Core coordinator orders E28 credential read-back, OLED transfer request, fixed SSID/channel AP start, AP-netif DHCP assignment, per-call request authorization and initial config provision; ensures `Config::wifiPass` matches the AP secret. Failed post-disclosure blank-frame requests can be retried without restarting AP or provisioning. The auth-gate object is not cached. The inert target smoke does not start Wi-Fi or verify hardware. No production boot/HTTP setup flow, PIN KDF/verifier, or protected routes |
+| enrolled roster + FSM | enrolled_roster.*, enroll_fsm.* | 40 current test_enroll registrations | NO | Queue FSM handles pending UART work, cancellation release fence, and refuses skip while a command is in flight; production scheduler/UI not done (C3) |
+| AS608 sensor integration | lib/as608/src, lib/hal_esp32/src | v0.2.92 test_as608_pipeline 16/16; ESP32 inert smoke build/link passed with final ELF symbol inspection | NO | Preferred As608AttendanceOwner now requires ApplicationAttendanceGate, which binds boot, exact storage/log/roster/admission/closure objects, config identity and health permission. Pipeline rechecks the gate at match commit; config runtime refuses an unbound closure engine. No production main/scheduler uses this composition; no singleton or synchronization is added. No enrollment service is exposed. E18 page mapping, U5 physical index semantics, C17 schedule history, C18 termEnd and the clock caller remain unresolved. The smoke target is inert and must not be flashed |
+| Diagnostic sketch | sketch/ | Job 11 added in v0.2.5 | yes, pending new run | Bring-up tool only. Job 11 reads index pages without changing templates; Job 5/9 fixed-page numbering discrepancy remains open (E18) |
+| Production firmware (drivers, scan path, OLED UI composition, buzzer patterns) | — | — | — | NOT STARTED; standalone OLED/NVS/AP adapters exist; v0.2.48 hardware probe is diagnostic-only and not production composition |
+| Bulk enroll | enroll_fsm.* | queue FSM regression coverage | NO | Queue workflow implemented in core; hardware/HTTP adapter not built |
 | 10-hour soak and brownout | — | — | — | NOT DONE |
-| Web dashboard | — | — | — | NOT STARTED (last in the plan) |
+| Web dashboard | — | — | — | NOT STARTED; SF2 reporting reference model now exists separately under web/sf2, not integrated |
 
-Test totals: 149 in the sandbox, 142 on the device (before the template cut and test_enroll). See docs/TESTS.md.
+Test totals: current source inventory is **735 C++ RUN_TEST registrations across 39 native suites** and **270 SF2 Node registrations across 12 test files**. v0.2.93 ran only the three C13 suites (73/73); 662 C++ registrations were not run. SF2 and full native N1 remain unrun. The v0.2.93 inert ESP32 smoke build/link passed and final ELF symbols were inspected; it is not production firmware or hardware evidence. Earlier C1/C34 and C3 results remain historical focused evidence. See RELEASE_v0.2.93.md and docs/AUDIT_v0.2.93.md.
 
 ## 3. Hardware (bring-up build, 3V3 only)
 Buzzer GPIO23. I2C SDA 21, SCL 22. AS608 TX to ESP32 RX2 (GPIO16), AS608 RX from ESP32 TX2 (GPIO17). Touch GPIO4. AS608 V+ and VA on 3V3, GND common. No bulk capacitor. Full detail: docs/SPECS/diag_sketch.md and docs/BRINGUP.md.
@@ -32,39 +55,112 @@ Buzzer GPIO23. I2C SDA 21, SCL 22. AS608 TX to ESP32 RX2 (GPIO16), AS608 RX from
 - docs/UNVERIFIED.md lists every claim that still needs proof, and the test that settles each.
 
 ## 5. Critical issues (full list: docs/CRITICAL.md)
-1. The running ClosureEngine never receives a changed schedule (C1). A config change is accepted but not applied until the engine is rebuilt.
-2. Restore is only partly built (C2).
-3. Enrollment is not built, so fast enrollment is not possible yet (C3).
+1. C1 core ordering is implemented in v0.2.12; v0.2.13 adds the ESP32 NVS slot backend; v0.2.15 adds `ConfigBootCoordinator`; v0.2.16 adds boot-to-health and current-window helpers. C17 blocks historical `unclosedPast` derivation until durable schedule history is designed under DELEGATED E2. C18 identifies inconsistent `termEnd` semantics across API, fingerprint scan and closure sweep. Keep production schedule changes disabled until both are resolved. Target build, production boot/runtime wiring, setup-code enforcement and power-cut/reboot proof also remain missing. NVS encryption for physical-flash confidentiality is out of the approved R11 threat scope; no protection against physical extraction is claimed.
+2. Restore has staged validation plus a semantic replay audit, but no storage swap, recovery journal or reboot recovery (C2/C13).
+3. Enrollment FSM cancellation/pending handling, raw AS608 commands, host-testable 0x1F occupancy refresh, shared owner-aware gate, enrollment lease, attendance scan client and shared sensor-bus composition root now exist. The production firmware scheduler/event pipeline, HTTP/UI, ESP32 build and device verification remain missing (C3). E23 is SIGNED; all production clients must use this one runtime/arbiter/link instance.
 4. Duplicate threshold and minScore have no data (C4).
 5. The diagnostic sketch leaves a duplicate template on the sensor (C5).
-6. Security duties are the adapter's to enforce. Nothing enforces them yet (C6).
+6. C6 has `PinAuthCoordinator`, `Esp32NvsPinAttemptStore`, `Esp32PinAuthRuntime`, `TokenSessionSuccessAction`, `Esp32SecureRandom`, `Esp32WifiAp`, `ApCredentialBootstrap`, `Esp32NvsApCredentialStore`, `Esp32BootstrapRandom`, `Esp32Oled` and `ApCredentialSetupCoordinator`. The user reports that v0.2.46 passed all 520 native cases and its expanded inert ESP32 adapter smoke target compiled/linked with Espressif32 8.0.0, Arduino-ESP32/framework libraries 3.3.12, esptool 5.4.0 and Xtensa toolchain 14.2.0+20260121 (47,012 B RAM; 912,216 B flash). The coordinator requests OLED transfer before starting AP, requires AP readiness, this AP netif's DHCP assignment and a per-call authorization gate before provisioning; v0.2.46 fixes SSID `att` (E29) and delegated channel 1 (E31), removes caller overrides and writes the exact AP credential into `Config::wifiPass`. The test/build results verify native logic and adapter compile/link only, not a production HTTP/boot integration, actual AP, panel pixels or first beacon. v0.2.47 added the diagnostic hardware-probe target; v0.2.48 extracts its NVS startup guard into the shared HAL. Both target builds remain pending. The NVS runtime owns the coordinator's store and only initializes missing counter state after verified `NEEDS_SETUP`. The token action preflights without mutating sessions and inserts/evicts only after full server response-write confirmation; the future route must serialize table use. `Esp32WifiAp` owns AP start/stop and RNG-ready notifications, accepts only caller credentials, caps clients at two, and sets WPA2-PSK/CCMP explicitly. `ApCredentialBootstrap` generates/persists a 128-bit first-setup credential, verifies it by read-back, and returns a disclosure request while NEEDS_SETUP; READY migration uses validated `Config::wifiPass` and fails closed on mismatch. These remain adapter modules with no production caller. E28 and E29 are SIGNED; E30 and E31 are DELEGATED (no reset/rotation; channel 1 default), and USB service recovery is not implemented. PBKDF2 verification/writing, chosen PIN KDF policy, HTTP/JSON routes and production fault-state enforcement remain absent; C6 is still blocking.
 
 ## 6. Next steps, in order
-1. Fix C1: rebuild the engine after a schedule change, or add a setter. Add a test that a changed lateMin closes a day correctly.
-2. Write enroll_fsm: queue (roster minus occupancy), duplicate search against the whole library before storing, retry on recoverable sensor errors, optional verify scan, occupancy refresh before each closure. Host tests first.
-3. Write the restore orchestrator (C2) with a failure test for every step.
-4. Write an adapter design: NVS keys, LittleFS IFileSet, mbedtls ICipher, HTTP endpoint mapping. Table first, code second.
-5. Device work, one sitting: empty the sensor, read the index table (U5), check ID 300 (U7), log scores for duplicate threshold (C4), code 23 (U6), power-cut test (C13), 10-hour soak (C8).
-6. Production firmware skeleton on the bench, then the scan path and buzzer and OLED patterns.
-7. Dashboard last.
+
+1. Do not flash the inert esp32-adapter-link image.
+2. When hardware is available, review the probe's data-safety limits before flashing. The diagnostic probe does not access application attendance/config namespaces, but Wi-Fi PHY calibration may use NVS namespace phy. Keep its temporary password private and redact PROBE_PASSWORD from serial captures.
+3. Continue safe source-only work on C3/C6 and other blockers without inventing product decisions. Keep E18, E30, E31, E12, E2/E26 and O8 constraints unchanged. Stop at genuine decision or hardware-evidence boundaries.
 
 ## 7. Working rules for the next assistant
 - Do not mark anything verified without the user's device output, a header signature, or pinned library docs.
 - Keep each reply short. Numbered decisions, "Decisions needed", "Open uncertainties" at the end.
-- Propose 2 to 5 steps before expanding scope. Wait for the user.
-- Do not regenerate tested core files. Add a test and a patch instead.
-- The user prefers few round trips: give exact, complete commands and batched deliverables.
+- Do not run the full native suite after every increment. Choose targeted suites from the affected modules; full native/SF2 tests are integration/release checkpoints. See `docs/TESTING_WORKFLOW.md` and `docs/DESKTOP_COMMANDER.md`.
+- Do not regenerate unrelated or already-tested core files. Add targeted tests before behavior changes; package each release as a complete archive.
+- The user prefers few round trips: batch changes, run targeted checks on the slow phone, reserve the full native suite for integration/release checkpoints, and give exact commands.
 - Tools: ArduinoDroid builds and flashes the sketch. PlatformIO in Termux with proot Debian runs the core tests. Flashing is by USB (Web Serial) per the handoff.
 - Ask which decisions are "your judgement" versus approved before changing a DELEGATED item.
 - Firmware is USB only (no OTA). The user chose this.
-- Install only from the full r2 archive. Never merge single files into an older tree (C14).
+- Install only from the full current archive. Never merge single files into an older tree (C14).
 
 ## 8. File map
 - README.md: layout and quick start
+- docs/TESTING_WORKFLOW.md and docs/DESKTOP_COMMANDER.md: targeted slow-phone verification and Desktop Commander procedure
 - HANDOFF_FINAL.md: signed-off product and architecture handoff (source of truth for rules)
-- lib/core/src: core modules (headers document each contract)
-- test/: 10 native suites
+- `lib/core/src`: core modules (headers document each contract)
+- `test/`: 35 native suites, 635 C++ RUN_TEST registrations. v0.2.77 passed 116/116 in five focused suites; 519 other registrations were not run. Full native N1 and SF2 were not run. The v0.2.77 inert ESP32 adapter target compiled/linked and its exact ELF passed static inspection; it was not flashed. No physical-device, NVS runtime or filesystem runtime test was performed.
 - sketch/: bring-up sketch
 - docs/CONTEXT.md (this file), CRITICAL.md, DECISIONS.md, TESTS.md, UNVERIFIED.md, BRINGUP.md
-- docs/SPECS/: one spec per module
-- docs/patches/: core_fixes.patch, fix_b2_tests.py, apply.sh (already applied, do not run), BASELINE_DIFF.txt
+- docs/SPECS/: one spec per module, including `as608_adapter.md`, `esp32_wifi_ap.md`, `ap_credential_bootstrap.md`, `esp32_oled.md` and `ap_credential_setup.md`
+- docs/patches/: core_fixes.patch, fix_b2_tests.py, apply.sh (already applied, do not run), BASELINE_DIFF.txt; docs/ADAPTER_DESIGN.md
+
+## 9. New static findings (C17/C18)
+The current timetable-effective boundary/history is not persisted (C17), so a current-timetable `unclosedPast` helper would be unsafe. Separately, API and fingerprint scan logic disagree on whether `termEnd` is inclusive, while `ClosureEngine` has no term-end bound (C18). E2 (config slot layout) is DELEGATED; v0.2.16 deliberately changes neither the config schema nor schedule history. See `docs/CRITICAL.md` and `docs/SPECS/config_runtime_guard.md`.
+
+
+## 10. SF2-SHS reporting workstream (v0.2.19)
+- User scope: both Regular SHS and Strengthened SHS; one section per device; ask for section during initial setup. A device is configured for one section/curriculum profile at a time, not multiple sections simultaneously.
+- Include every learner whose enrollment overlaps any part of the report month, including early transfers out. Dynamic row count has no hard 45-row ceiling; use continuation pages.
+- User selected the local HTML-builder AM/PM diagonal convention. `E` counts as Present in monthly totals. Late marks remain in source; v0.2.18 provisionally treats Late as attended for quadrant selection but does not compute TARDY totals.
+- `docs/sf2/` records signed reporting choices, provisional teacher questions, exact template audit, core-source mapping, and the proposed snapshot contract. The uploaded workbook is preserved as reference only.
+- `web/sf2/attendance_model.mjs`, `learner_layout.mjs`, and `section_model.mjs` implement pure AM/PM conversion, month-overlap roster selection, semantic learner rows, continuation-page planning, and section-level daily totals. v0.2.19 adds `snapshot_schema.mjs`, `snapshot_adapter.mjs`, `preview_model.mjs`, and synthetic snapshot fixtures. The browser-side schema checks source revisions, complete calendar/roster/attendance coverage, event provenance, and the exact six-record CLOSE group reference (one EV_CLOSE plus five 64-bit EV_PAYLOAD records for MAX_ID=300).
+Historical SF2 verification: 257/257 Node tests passed in v0.2.37 and were rerun in v0.2.40; 25 `.mjs` modules passed `node --check`. The current v0.2.81/v0.2.82 source inventory is 270 registrations across 12 test files; the 13 later registrations have not been included in a recorded full run. This remains reference-model host evidence only. There is still no production API, dashboard integration, XLSX writer, or server-side snapshot assembly.
+- Template audit: 1 sheet; 4 learner placeholders; 30 date slots (Mon-Sat in five blocks); 184 merges; 23/25 defined names broken; one external workbook link; zero formulas; two drawing anchors; fixed 85% landscape with custom paper code. Source metadata is 2018. Not confirmed as latest official template. The uploaded legend conflicts with the user's chosen AM/PM shading convention; school acceptance remains open.
+- Critical reporting gaps: C19 custom legend acceptance; C20 workbook normalization/current-version confirmation; C21 school/learner reporting metadata; C22 authenticated immutable snapshot/API; C23 Tardy and one-session mapping; C24 reporting identity plus semantic transition/date validation beyond the new roster projections; C25 current-writer event-group audit is not wired into normal boot or a snapshot route. Historical schedule and term-end blockers C17/E2 and C18/E26 also remain.
+
+
+## 11. Arduino startup and NVS erase risk (C34)
+
+Pinned Arduino-ESP32 3.3.12 calls `initArduino()` from `app_main()` before the sketch `setup()`. Its `initArduino()` invokes `nvs_flash_init()` and, on `ESP_ERR_NVS_NO_FREE_PAGES` or `ESP_ERR_NVS_NEW_VERSION_FOUND`, attempts to erase the entire default DATA_NVS partition with `esp_partition_erase_range(partition, 0, partition->size)` before retrying. A guard placed in `setup()` is too late. This is a data-integrity blocker for any firmware using the unmodified startup path.
+
+v0.2.48 moves the `nvs_flash_init` and `esp_partition_erase_range` wrappers into shared `Esp32NvsStartupGuard`. The init wrapper captures the first result and counts calls; `safeForApplication` requires exactly one pre-setup call that returned `ESP_OK`. Missing or multiple calls fail closed, so future code must not initialize NVS from global constructors. The erase wrapper rejects only a whole DATA_NVS partition erase request and permits smaller erases. The diagnostic probe checks the first result before I2C/OLED/AP work. v0.2.50 built both target configurations and each exact final ELF passed `tools/inspect_probe_wrappers.sh`. No device test is claimed. The standard ESP-IDF `nvs_flash_erase()` APIs should be caught because their pinned 5.5.5 implementations call `esp_partition_erase_range`; the ELF inspector now checks those routes. This is still not a complete erase firewall: smaller range calls are allowed, and alternate/direct flash erase paths may bypass it. The standard NVS erase APIs can deinitialize open handles before the lower-level erase is rejected, so they are not a recovery workflow. It is not yet a production boot fix.
+
+
+
+## 12. v0.2.51 attendance-pipeline test increment
+- Added test/test_as608_pipeline with six cases that exercise the actual As608Runtime composition and injected mapping boundary through to durable EV_SCAN append. Present/Late, duplicate, unresolved mapping, storage failure and no-finger paths are covered.
+- The injected resolver is test-only. E18 is unchanged and no production map, scheduler or firmware caller exists. C3 remains blocking.
+- Targeted verification passed 108/108 across seven suites; inspector fixtures 11/11. Full native suite (431 other registrations), SF2, target rebuilds and device behavior were not reverified.
+
+
+## 13. v0.2.52 AS608 startup coordinator
+
+- Adds As608StartupCoordinator to sequence enrollment-owner authentication, capacity read, full occupancy index refresh, enrollment-lease release, attendance-owner authentication and a matching-capacity check before READY.
+- Runtime now retains and exposes the exact Occupancy& used by its reader and FSM; coordinator no longer accepts a second potentially mismatched occupancy argument.
+- As608AttendanceClient::invalidateReady() supports revocation after an attendance-side capacity mismatch.
+- Five startup tests cover stale occupancy invalidation, complete index refresh, partial refresh failure, capacity disagreement, transport poison and enrollment authentication rejection.
+- The pipeline now requires valid occupancy at scan start and immediately before EV_SCAN append; two tests cover invalid map at each boundary.
+- Focused native verification: AS608 gate 31/31, attendance pipeline 8/8; 39/39 total. Current 546 C++ registrations across 34 suites; 507 not run.
+- The smoke target now references the startup coordinator and invalidation symbols through inert anchors. This target build compiles/links only and must never be flashed.
+- Critical limitation in v0.2.52: runtime attendance setup remained publicly callable without the coordinator. There was no production main/scheduler to enforce startup. E18 and actual sensor 0x1F semantics remained unverified; no decision ledger or handoff entry changed.
+
+## 14. v0.2.53 runtime-owned sensor lifecycle gates (historical snapshot)
+
+- The public three-argument `As608AttendanceClient` constructor and four-argument `As608EnrollmentSession` constructor remain available for isolated low-level use; they do not provide runtime lifecycle guarantees.
+- `As608Runtime` constructs both clients in runtime-managed mode. Public attendance `beginSetup()`/`beginScan()` return false; public `stepSetup()`/`stepScan()` return fatal without polling/transmitting. Public runtime enrollment `acquire()` returns false until startup READY, and public `abortPreparation()` cannot release the coordinator's boot reservation (it is enabled again for the caller after READY).
+- `As608StartupCoordinator` alone can acquire the runtime session for boot and service enrollment-side authentication/capacity/index refresh plus attendance setup. Only after attendance-side capacity matches and the map is valid does it enable subsequent runtime enrollment acquisition.
+- `As608AttendancePipeline` alone can start/service runtime-managed scans through private methods. Runtime raw enrollment sensor/occupancy-reader/FSM getters are private to the coordinator.
+- Test-first regressions reproduced the bypasses: runtime enrollment `acquire()` succeeded before READY; public attendance `stepSetup()` advanced setup while startup was pending; public `stepScan()` could poll a pipeline-owned scan; and public `abortPreparation()` could release the boot reservation. Final focused suites passed at that release: gate 33/33 and pipeline 8/8 (41/41 total).
+- Pipeline fixtures drove the actual synthetic UART startup sequence instead of manually setting up the runtime-owned attendance client.
+- At v0.2.53 there was no production enrollment FSM/service API or scheduler; standalone low-level clients/sessions and parallel transports remained constructible; and the injected-map runtime constructor retained a caller-owned mutable `Occupancy&`. C3 remained blocking; E18 stayed DELEGATED.
+- No changes to `HANDOFF_FINAL.md` or `docs/DECISIONS.md`. No final-source ESP32 target build, full native suite, SF2 suite or hardware test was performed.
+
+## 15. v0.2.54 owned occupancy and attendance-only composition
+
+- The preferred `As608Runtime(Stream&, RosterStore&, password)` constructor owns its `Occupancy` object. The old injected-map constructor remains for low-level tests/adapters only.
+- `As608Runtime::occupancy()` now returns `const Occupancy&`; only startup has private mutable access. `enrollment()` returns a const session reference and `attendance()` returns a const attendance-client status view. Callers cannot acquire/sync/abort the runtime session or start/step raw attendance. The pipeline obtains private attendance-client access through its Runtime-bound friend constructor. `As608AttendanceClient::invalidateReady()` is private to startup.
+- The inert smoke source uses the owned-occupancy constructor. This source was not compiled for ESP32 in v0.2.54.
+- Added `As608AttendanceOwner`, which owns exactly one runtime, startup coordinator and attendance event pipeline. It exposes only startup, checked scan begin/step, occupancy read-only view, sensor status and the existing config-after-commit pipeline hooks. It does not expose the raw runtime/client/link/FSM or any enrollment operation. External log, roster, resolver and admission objects must outlive the owner.
+- The owner is intended to be instantiated once by a production root and serviced from one serialized loop. This code does not enforce global singleton construction, add a mutex or create the missing application scheduler. Multiple owners or independent low-level clients can still be constructed by unrelated code.
+- Test-first proof: compile-time assertions first failed against v0.2.53 for mutable Occupancy/EnrollmentSession references; after those fixes, the added AttendanceClient const-view assertion failed against the intermediate tree. The first owner test also failed because the owner header did not yet exist. The pipeline now uses Runtime-bound private access instead of extracting the raw attendance client. Final focused suites passed: gate 34/34 and pipeline 10/10 (44/44 total). Tests use synthetic UART/storage only.
+- C3 remains blocking. No enrollment service is exposed until E18 and enrollment semantics are resolved; no production `main.cpp`, scheduler, HTTP routes or admin UI were added. No final-source ESP32 build, full native regression, SF2 suite or hardware test was run.
+
+
+## 16. v0.2.55 owner-bound configuration application
+
+- Added `As608OwnerConfigRuntime`, an `IConfigApplyRuntime` adapter around the preferred `As608AttendanceOwner`. Its preflight blocks config changes until sensor startup is READY and while an attendance scan/client operation is active.
+- After ConfigApplyCoordinator commits and reads back the inactive A/B slot, the adapter updates the owner pipeline/admission policy first, then updates `ClosureEngine::setSchedule()`. ConfigApplyCoordinator retains generation and storage transaction ownership.
+- New regression exercises the full ConfigApplyCoordinator path with in-memory slots and synthetic UART: BUSY/no write before READY; a live UTC-offset change is refused before any write because RosterStore retains its construction-time offset; BUSY/no write during a scan; after scan release, generation 8 is committed and applied; both attendance scan admission and ClosureEngine observe the new timetable; unchanged generation-8 Config performs no second write.
+- `As608AttendancePipeline::canSetConfigAfterCommit()` now requires the next Config UTC offset to match `RosterStore::utcOffsetMin()`. Supporting offset changes requires a validated scratch replay and safe roster-state replacement; a partial offset update is unsafe.
+- Exact final focused run: `pio test -e native -f 'test_as608_pipeline'` — 11/11 passed, exit 0, 39.382 s. The historical v0.2.54 gate result 34/34 was not rerun. Inventory: 552 C++ registrations in 34 suites, 541 not run in this increment.
+- The adapter does not create a production app root, prove that owner and ClosureEngine share the same LogStore/RosterStore/boot Config, enforce one owner, or add a mutex. Its non-owning references and serialized-loop requirement are application responsibilities. If post-commit runtime application fails, ConfigApplyCoordinator latches fault because persistent state is newer than RAM.
+- No final-source ESP32 target compile/link, ELF inspection, SF2/full-native run, flash, NVS operation or physical hardware verification was performed. `HANDOFF_FINAL.md` and `docs/DECISIONS.md` are unchanged; E18 remains DELEGATED.
+
+## Current checkpoint — v0.2.95 (2026-11-12)
+A native integration regression now covers `addFile()` returning false after creating a visible empty month entry. `LogStore` remains faulted and blocks retry until a fresh read-only `open()` succeeds. This closes a host-side composition-test gap only; C13.3 remains blocked on mounted target VFS, low-space, directory-entry durability, restart/interruption, physical power-cut, and production-owner integration evidence.

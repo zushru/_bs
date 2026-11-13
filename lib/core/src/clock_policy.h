@@ -19,5 +19,14 @@ struct ClockDecision {
 };
 ClockDecision decideClock(const ClockCtx& c);
 bool nearScanWindow(const Timetable& t, const Params& p, uint32_t epoch, uint32_t marginS);
-bool applyClockSet(LogStore& log, const ClockDecision& d, uint32_t oldEpoch, uint32_t newEpoch);
+enum ClockApplyResult : uint8_t {
+  CLOCK_APPLY_REJECTED = 0,          // decision/input invalid; no append attempted
+  CLOCK_APPLY_COMMITTED,             // GAP coverage (if any) and CLOCK_SET pair appended
+  CLOCK_APPLY_COMMIT_UNCERTAIN,      // one or more appends failed; storage may contain a prefix or complete commit
+  CLOCK_APPLY_LOG_FAULTED            // log was already faulted; no append attempted
+};
+// Only CA_APPLY decisions with a valid source and ordered gap bounds may write.
+// COMMIT_UNCERTAIN requires the caller to stop writes and reopen/reconcile before retrying.
+ClockApplyResult applyClockSet(LogStore& log, const ClockDecision& d,
+                               uint32_t oldEpoch, uint32_t newEpoch);
 }

@@ -16,8 +16,23 @@ size_t RosterStore::activeCount() const {
   for (uint16_t id = 1; id <= MAX_ID; id++) if (active(id)) c++;
   return c;
 }
+bool RosterStore::intervalAt(size_t index, RosterIntervalView& out) const {
+  if (index >= nIv_) return false;
+  out.studentId = iv_[index].id;
+  out.startDayInclusive = iv_[index].from;
+  out.endDayExclusive = iv_[index].to;
+  return true;
+}
+bool RosterStore::knownIdAt(size_t ordinal, uint16_t& outId) const {
+  for (uint16_t id = 1; id <= MAX_ID; id++) {
+    if (!known(id)) continue;
+    if (ordinal == 0) { outId = id; return true; }
+    --ordinal;
+  }
+  return false;
+}
 size_t RosterStore::nameOf(uint16_t id, char out[ROSTER_NAME_MAX + 1]) const {
-  if (!known(id)) return 0;
+  if (out == nullptr || !known(id)) return 0;
   memcpy(out, n_[id].s, n_[id].len);
   out[n_[id].len] = 0;
   return n_[id].len;
@@ -73,7 +88,7 @@ void RosterStore::onRecord(const Event& e) {
   }
 }
 bool RosterStore::expected(uint16_t id, int32_t day) {
-  if (overflow_) return false;
+  if (!historyComplete()) return false;
   for (size_t i = 0; i < nIv_; i++)
     if (iv_[i].id == id && iv_[i].from <= day && day < iv_[i].to) return true;
   return false;
@@ -105,8 +120,10 @@ bool RosterStore::validName(const char* s, size_t n) {
 }
 RosterErr RosterStore::planSet(uint16_t id, const char* name, size_t n, uint32_t epoch, Event* out, size_t& cnt) const {
   cnt = 0;
+  if (out == nullptr) return RE_BAD_OUTPUT;
   if (id < 1 || id > MAX_ID) return RE_BAD_ID;
   if (!validName(name, n)) return RE_BAD_NAME;
+  if (!historyComplete()) return RE_UNTRUSTED;
   if (known(id)) {
     if (n_[id].len == n && memcmp(n_[id].s, name, n) == 0) return RE_NOOP;
   } else if (nIv_ >= MAX_INTERVALS || overflow_) return RE_FULL;
@@ -124,7 +141,9 @@ RosterErr RosterStore::planSet(uint16_t id, const char* name, size_t n, uint32_t
 }
 RosterErr RosterStore::planDeactivate(uint16_t id, uint32_t epoch, Event* out, size_t& cnt) const {
   cnt = 0;
+  if (out == nullptr) return RE_BAD_OUTPUT;
   if (id < 1 || id > MAX_ID) return RE_BAD_ID;
+  if (!historyComplete()) return RE_UNTRUSTED;
   if (!known(id)) return RE_UNKNOWN;
   if (!openIv_(id)) return RE_NOOP;
   out[0] = Event{EV_ROSTER, 0, id, epoch, 0, RA_DEACTIVATE};
@@ -133,7 +152,9 @@ RosterErr RosterStore::planDeactivate(uint16_t id, uint32_t epoch, Event* out, s
 }
 RosterErr RosterStore::planActivate(uint16_t id, uint32_t epoch, Event* out, size_t& cnt) const {
   cnt = 0;
+  if (out == nullptr) return RE_BAD_OUTPUT;
   if (id < 1 || id > MAX_ID) return RE_BAD_ID;
+  if (!historyComplete()) return RE_UNTRUSTED;
   if (!known(id)) return RE_UNKNOWN;
   if (openIv_(id)) return RE_NOOP;
   if (nIv_ >= MAX_INTERVALS || overflow_) return RE_FULL;

@@ -1,12 +1,19 @@
 #include "health_fsm.h"
 namespace att {
-HState HealthFsm::update(const HealthInputs& in) {
+HState HealthFsm::update(const HealthInputs& in, bool clockReverified) {
   uint8_t active = 0;
   if (!in.storageOk) active |= HB_STORAGE;
   if (!in.cfgOk) active |= HB_CONFIG;
-  if (in.rtcLostPower || !in.rtcPresent || in.epochBelowFloor || in.epochBelowLog) active |= HB_CLOCK;
+  // Initial provisioning does not require calendar time. Once provisioned,
+  // plausible RTC observations still need explicit clock/log acceptance.
+  if (in.provisioned && (!in.clockTrusted || in.rtcLostPower ||
+      !in.rtcPresent || in.epochBelowFloor || in.epochBelowLog))
+    active |= HB_CLOCK;
   latch_ |= (uint8_t)(active & (HB_STORAGE | HB_CONFIG | HB_CLOCK));          // faults latch...
   if (in.reverified) latch_ &= active;                                          // ...until cause gone AND re-verified
+  // Clock confirmation is not evidence that storage/configuration were reverified.
+  if (clockReverified && !(active & HB_CLOCK))
+    latch_ &= static_cast<uint8_t>(~HB_CLOCK);
   uint8_t m = (uint8_t)(latch_ | active);
   if (!in.provisioned) m |= HB_UNPROV;
   if (!in.sensorOk) m |= HB_SENSOR;

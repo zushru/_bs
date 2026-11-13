@@ -1,0 +1,81 @@
+Verbosity level can be increased via `-v, -vv, or -vvv` option
+Collected 40 tests
+
+Processing test_as608_pipeline in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_as608_pipeline/test_main.cpp:840: test_owner_config_runtime_gates_until_ready_blocks_active_scan_and_updates_schedule	[PASSED]
+test/test_as608_pipeline/test_main.cpp:841: test_owner_config_runtime_rejects_unbound_closure	[PASSED]
+test/test_as608_pipeline/test_main.cpp:842: test_attendance_owner_remains_closed_after_startup_authentication_fault	[PASSED]
+test/test_as608_pipeline/test_main.cpp:843: test_attendance_owner_hides_raw_sensor_and_commits_only_through_pipeline	[PASSED]
+test/test_as608_pipeline/test_main.cpp:792: test_application_gate_rechecks_clock_health_before_match_commit: Expected 10 Was 9	[FAILED]
+test/test_as608_pipeline/test_main.cpp:845: test_application_gate_rejects_incomplete_boot_or_mismatched_owner_graph	[PASSED]
+test/test_as608_pipeline/test_main.cpp:846: test_linear_page_resolver_enforces_signed_mapping_and_bounds	[PASSED]
+test/test_as608_pipeline/test_main.cpp:847: test_match_is_resolved_checked_and_committed_once	[PASSED]
+test/test_as608_pipeline/test_main.cpp:848: test_configured_term_end_day_is_inclusive_for_scans	[PASSED]
+test/test_as608_pipeline/test_main.cpp:849: test_late_match_is_committed_as_late	[PASSED]
+test/test_as608_pipeline/test_main.cpp:850: test_duplicate_scan_does_not_append_a_second_attendance_event	[PASSED]
+test/test_as608_pipeline/test_main.cpp:851: test_unresolved_page_mapping_fails_without_creating_a_scan	[PASSED]
+test/test_as608_pipeline/test_main.cpp:852: test_log_write_failure_reports_uncertain_commit	[PASSED]
+test/test_as608_pipeline/test_main.cpp:853: test_complete_attendance_write_reported_failed_is_not_duplicated_after_reopen	[PASSED]
+test/test_as608_pipeline/test_main.cpp:854: test_pipeline_fails_closed_when_roster_history_is_incomplete	[PASSED]
+test/test_as608_pipeline/test_main.cpp:855: test_pipeline_refuses_scan_when_occupancy_is_not_valid	[PASSED]
+test/test_as608_pipeline/test_main.cpp:856: test_pipeline_rechecks_occupancy_before_committing_a_match	[PASSED]
+test/test_as608_pipeline/test_main.cpp:857: test_no_finger_result_is_propagated_and_sensor_lease_released	[PASSED]
+Program received signal SIGHUP (Hangup)
+----------- native:test_as608_pipeline [ERRORED] Took 39.14 seconds -----------
+
+Processing test_enroll in native environment
+--------------------------------------------------------------------------------
+Building...
+Testing...
+test/test_enroll/test_main.cpp:719: test_id_page_mapping_boundaries	[PASSED]
+test/test_enroll/test_main.cpp:720: test_occupancy_basics_and_bounds	[PASSED]
+test/test_enroll/test_main.cpp:721: test_index_page_decoding	[PASSED]
+test/test_enroll/test_main.cpp:722: test_expected_requires_template_and_valid_read	[PASSED]
+test/test_enroll/test_main.cpp:723: test_reconcile_counts	[PASSED]
+test/test_enroll/test_main.cpp:724: test_queue_and_slot_allocation_helpers_refuse_invalid_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:725: test_queue_and_slot_allocation	[PASSED]
+test/test_enroll/test_main.cpp:726: test_close_snapshot_excludes_unenrolled	[PASSED]
+test/test_enroll/test_main.cpp:727: test_fsm_begin_requires_valid_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:728: test_fsm_queue_is_active_roster_minus_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:729: test_fsm_rejects_active_student_above_sensor_capacity	[PASSED]
+test/test_enroll/test_main.cpp:730: test_fsm_enforces_45_active_student_limit	[PASSED]
+test/test_enroll/test_main.cpp:731: test_fsm_empty_queue_finishes_immediately	[PASSED]
+test/test_enroll/test_main.cpp:732: test_fsm_duplicate_blocks_store_and_reports_existing_id	[PASSED]
+test/test_enroll/test_main.cpp:733: test_fsm_can_skip_duplicate_and_continue_queue	[PASSED]
+test/test_enroll/test_main.cpp:734: test_fsm_stores_at_id_minus_one_and_advances_after_release	[PASSED]
+test/test_enroll/test_main.cpp:735: test_fsm_waits_for_first_finger_removal_before_second_sample	[PASSED]
+test/test_enroll/test_main.cpp:736: test_fsm_verify_toggle_off_skips_post_store_scan	[PASSED]
+test/test_enroll/test_main.cpp:737: test_fsm_verify_toggle_on_requires_remove_then_matching_scan	[PASSED]
+test/test_enroll/test_main.cpp:738: test_fsm_verify_failure_is_visible_and_can_continue_without_deleting	[PASSED]
+test/test_enroll/test_main.cpp:739: test_fsm_no_finger_is_wait_not_an_error	[PASSED]
+test/test_enroll/test_main.cpp:740: test_fsm_pauses_after_three_transient_errors_and_can_retry	[PASSED]
+test/test_enroll/test_main.cpp:741: test_fsm_model_mismatch_restarts_first_finger_pair	[PASSED]
+test/test_enroll/test_main.cpp:742: test_fsm_rechecks_occupancy_before_store	[PASSED]
+test/test_enroll/test_main.cpp:743: test_fsm_begin_rejects_incomplete_roster_history	[PASSED]
+test/test_enroll/test_main.cpp:744: test_fsm_rechecks_roster_history_before_store	[PASSED]
+test/test_enroll/test_main.cpp:745: test_fsm_rechecks_roster_before_store	[PASSED]
+test/test_enroll/test_main.cpp:746: test_fsm_invalid_occupancy_before_store_blocks_write	[PASSED]
+test/test_enroll/test_main.cpp:747: test_fsm_ambiguous_store_invalidates_and_refresh_detects_success	[PASSED]
+test/test_enroll/test_main.cpp:748: test_fsm_occupancy_refresh_cannot_resume_with_incomplete_roster_history	[PASSED]
+test/test_enroll/test_main.cpp:749: test_fsm_ambiguous_store_refresh_without_target_requeues_student	[PASSED]
+test/test_enroll/test_main.cpp:750: test_fsm_skip_is_blocked_while_sensor_command_is_pending	[PASSED]
+test/test_enroll/test_main.cpp:751: test_fsm_cancel_waits_for_confirmed_finger_removal	[PASSED]
+test/test_enroll/test_main.cpp:752: test_fsm_cancel_drains_inflight_command_before_release_fence	[PASSED]
+test/test_enroll/test_main.cpp:753: test_fsm_cancel_sensor_fault_keeps_ownership_until_retry_and_release	[PASSED]
+test/test_enroll/test_main.cpp:754: test_fsm_pending_sensor_results_do_not_advance_or_consume_retries	[PASSED]
+test/test_enroll/test_main.cpp:755: test_fsm_cancel_during_pending_store_applies_positive_ack	[PASSED]
+test/test_enroll/test_main.cpp:756: test_fsm_cancel_during_ambiguous_store_invalidates_occupancy	[PASSED]
+test/test_enroll/test_main.cpp:757: test_fsm_pending_store_does_not_invalidate_occupancy_or_repeat_write	[PASSED]
+test/test_enroll/test_main.cpp:758: test_fsm_occupancy_refresh_does_not_requeue_prior_skips	[PASSED]
+---------------- native:test_enroll [PASSED] Took 12.88 seconds ----------------
+
+=================================== SUMMARY ===================================
+Environment    Test                 Status    Duration
+-------------  -------------------  --------  ------------
+native         test_as608_pipeline  ERRORED   00:00:39.137
+native         test_enroll          PASSED    00:00:12.880
+
+============ 59 test cases: 1 failed, 57 succeeded in 00:00:52.017 ============

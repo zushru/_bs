@@ -1,3 +1,6 @@
+# Historical patch artifact from 2026-11-02. Do not apply to the current tree.
+# Its bool applyClockSet() excerpt is superseded by ClockApplyResult in v0.2.62.
+
 diff -u a/lib/core/src/clock_policy.cpp b/lib/core/src/clock_policy.cpp
 --- a/lib/core/src/clock_policy.cpp	2026-11-02 14:17:59.159810405 +0000
 +++ b/lib/core/src/clock_policy.cpp	2026-11-02 14:17:59.247960020 +0000

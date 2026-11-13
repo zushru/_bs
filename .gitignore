@@ -2,3 +2,17 @@
 *.o
 .vscode/
 __pycache__/
+node_modules/
+# Public repository exclusions: user-supplied SF2 workbook copies may contain
+# school/student information. Keep the original files local.
+docs/sf2/reference/*.xlsx
+
+# Standalone AS608 diagnostic embeds a fixed SoftAP credential; keep it local
+# until its credential handling is redesigned.
+sketch/as608_readonly_web/
+# Development-only before/after snapshots are retained locally; Git history
+# records accepted changes without publishing duplicated recovery trees.
+comms/staging/
+
+# Editor/atomic-write scratch files are not source artifacts.
+*.tmp.*
